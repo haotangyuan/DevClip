@@ -8,7 +8,7 @@ struct QuickPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             searchBar
-            Divider()
+            Divider().opacity(0.5)
 
             switch viewModel.mode {
             case .actions:
@@ -18,15 +18,20 @@ struct QuickPanelView: View {
             }
 
             if viewModel.isPreviewVisible {
-                Divider()
+                Divider().opacity(0.5)
                 previewPane
             }
 
-            Divider()
+            Divider().opacity(0.5)
             statusBar
         }
         .frame(width: 740, height: viewModel.isPreviewVisible ? 600 : 470)
-        .background(quickPanelBackground)
+        .background(
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                Rectangle().fill(.regularMaterial).opacity(0.7)
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onAppear {
             isSearchFocused = true
@@ -41,23 +46,33 @@ struct QuickPanelView: View {
         }
     }
 
-    private var quickPanelBackground: some View {
-        DevClipWorkspaceBackground()
-    }
+    // MARK: - Search Bar
 
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
+                .font(.system(size: 16))
 
             TextField("搜索剪贴板", text: $viewModel.queryText)
                 .textFieldStyle(.plain)
-                .focused($isSearchFocused)
                 .font(.system(size: 18, weight: .medium, design: .default))
+                .focused($isSearchFocused)
+
+            if !viewModel.queryText.isEmpty {
+                Button {
+                    viewModel.queryText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+            }
 
             if viewModel.mode == .diff, let title = viewModel.diffBaseTitle {
                 Text("旧记录：\(title)")
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .padding(.horizontal, 8)
@@ -65,9 +80,11 @@ struct QuickPanelView: View {
                     .background(.thinMaterial, in: Capsule())
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 18)
         .padding(.vertical, 14)
     }
+
+    // MARK: - Result List
 
     private var resultList: some View {
         ScrollViewReader { proxy in
@@ -85,7 +102,7 @@ struct QuickPanelView: View {
                         }
                     }
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, 4)
             }
             .overlay {
                 if viewModel.results.isEmpty {
@@ -99,6 +116,8 @@ struct QuickPanelView: View {
             }
         }
     }
+
+    // MARK: - Action Panel
 
     private var actionPanel: some View {
         HStack(spacing: 0) {
@@ -117,7 +136,7 @@ struct QuickPanelView: View {
                             }
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                 }
                 .overlay {
                     if viewModel.smartActions.isEmpty {
@@ -135,16 +154,22 @@ struct QuickPanelView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 if let action = viewModel.selectedAction {
-                    Label(action.displayName, systemImage: "wand.and.stars")
-                        .font(.headline)
+                    HStack(spacing: 8) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                        Label(action.displayName, systemImage: "")
+                            .font(.system(size: 14, weight: .semibold))
+                            .labelStyle(.titleOnly)
+                    }
 
                     Text(ClipboardKindPresentation.categoryName(action.category))
-                        .font(.caption)
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
 
                     Text(action.isDestructive ? "破坏性动作" : "预览不会修改原记录")
-                        .font(.caption)
-                        .foregroundStyle(action.isDestructive ? .red : .secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(action.isDestructive ? AnyShapeStyle(.red) : AnyShapeStyle(.tertiary))
 
                     Spacer()
                 } else {
@@ -156,6 +181,8 @@ struct QuickPanelView: View {
         }
     }
 
+    // MARK: - Preview Pane
+
     private var previewPane: some View {
         ScrollView {
             Text(viewModel.previewText)
@@ -165,7 +192,10 @@ struct QuickPanelView: View {
                 .padding(14)
         }
         .frame(height: 150)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
     }
+
+    // MARK: - Status Bar
 
     private var statusBar: some View {
         HStack(spacing: 8) {
@@ -176,20 +206,24 @@ struct QuickPanelView: View {
             Spacer()
 
             if let entry = viewModel.selectedResult?.entry {
-                Text(entry.sourceAppName ?? "未知应用")
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Text(ClipboardKindPresentation.displayName(entry.detectedKind))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if let appName = entry.sourceAppName {
+                        Text(appName)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(ClipboardKindPresentation.displayName(entry.detectedKind))
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
-        .font(.caption)
-        .padding(.horizontal, 14)
+        .font(.system(size: 11))
+        .padding(.horizontal, 18)
         .padding(.vertical, 8)
+        .background(.thinMaterial.opacity(0.5))
     }
 }
+
+// MARK: - Result Row
 
 private struct QuickPanelResultRow: View {
     var result: SearchResult
@@ -199,11 +233,12 @@ private struct QuickPanelResultRow: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: result.entry.isPinned ? "pin.fill" : ClipboardKindPresentation.iconName(result.entry.detectedKind))
                 .foregroundStyle(isSelected ? .white : .secondary)
+                .font(.system(size: 13))
                 .frame(width: 20)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(result.entry.title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
 
                 Text(result.entry.previewText)
@@ -211,14 +246,14 @@ private struct QuickPanelResultRow: View {
                     .foregroundStyle(isSelected ? .white.opacity(0.86) : .secondary)
                     .lineLimit(2)
 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Text(ClipboardKindPresentation.displayName(result.entry.detectedKind))
                     Text(result.entry.createdAt.formatted(date: .abbreviated, time: .shortened))
                     if let sourceAppName = result.entry.sourceAppName {
                         Text(sourceAppName)
                     }
                 }
-                .font(.caption2)
+                .font(.system(size: 10))
                 .foregroundStyle(
                     isSelected ? AnyShapeStyle(.white.opacity(0.72)) : AnyShapeStyle(.tertiary)
                 )
@@ -227,18 +262,20 @@ private struct QuickPanelResultRow: View {
 
             Spacer(minLength: 8)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background {
             if isSelected {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color.accentColor)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 2)
             }
         }
     }
 }
+
+// MARK: - Action Row
 
 private struct QuickPanelActionRow: View {
     var action: TransformDefinition
@@ -248,27 +285,28 @@ private struct QuickPanelActionRow: View {
         HStack(spacing: 10) {
             Image(systemName: "wand.and.stars")
                 .foregroundStyle(isSelected ? .white : .secondary)
+                .font(.system(size: 13))
                 .frame(width: 20)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(action.displayName)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
 
                 Text(ClipboardKindPresentation.categoryName(action.category))
-                    .font(.caption2)
+                    .font(.system(size: 11))
                     .foregroundStyle(isSelected ? .white.opacity(0.76) : .secondary)
             }
 
             Spacer()
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background {
             if isSelected {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color.accentColor)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 2)
             }
         }

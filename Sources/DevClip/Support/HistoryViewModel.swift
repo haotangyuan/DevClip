@@ -1,3 +1,4 @@
+import AppKit
 import DevClipCore
 import Foundation
 
@@ -38,18 +39,21 @@ final class HistoryViewModel: ObservableObject {
     @Published var selectedEntryID: UUID?
     @Published private(set) var entries: [ClipboardEntry] = []
     @Published private(set) var statusMessage = ""
+    @Published private(set) var thumbnailImage: NSImage?
 
     private var allEntries: [ClipboardEntry] = []
     private let parser = SearchQueryParser()
     private let repository: any ClipboardRepository
     private let searchService: any SearchService
     private let pasteEngine: PasteEngine
+    private let blobStore: (any BlobStore)?
     private var searchTask: Task<Void, Never>?
 
     init(dependencies: DependencyContainer) {
         self.repository = dependencies.repository
         self.searchService = dependencies.searchService
         self.pasteEngine = dependencies.pasteEngine
+        self.blobStore = dependencies.blobStore
     }
 
     var selectedEntry: ClipboardEntry? {
@@ -167,6 +171,42 @@ final class HistoryViewModel: ObservableObject {
             statusMessage = result.didPaste ? "已自动粘贴纯文本" : "已复制纯文本"
         } catch {
             statusMessage = "粘贴失败：\(error.localizedDescription)"
+        }
+    }
+
+    func loadThumbnail(for entry: ClipboardEntry) async {
+        guard entry.detectedKind == .image, let blobStore else {
+            thumbnailImage = nil
+            return
+        }
+
+        // Try thumbnail path first, fall back to main blob path
+        let path = entry.metadata.values["thumbnailBlobPath"]
+            ?? entry.metadata.values["blobPath"]
+
+        guard let path else {
+            thumbnailImage = nil
+            return
+        }
+
+        do {
+            let data = try await blobStore.load(relativePath: path)
+            thumbnailImage = NSImage(data: data)
+        } catch {
+            thumbnailImage = nil
+        }
+    }
+
+    func loadThumbnailForRow(entry: ClipboardEntry) async -> NSImage? {
+        guard entry.detectedKind == .image, let blobStore else { return nil }
+        let path = entry.metadata.values["thumbnailBlobPath"]
+            ?? entry.metadata.values["blobPath"]
+        guard let path else { return nil }
+        do {
+            let data = try await blobStore.load(relativePath: path)
+            return NSImage(data: data)
+        } catch {
+            return nil
         }
     }
 

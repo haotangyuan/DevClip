@@ -10,96 +10,186 @@ struct TransformPreviewRootView: View {
 
     var body: some View {
         NavigationSplitView {
-            VStack(alignment: .leading, spacing: 10) {
+            sidebar
+        } detail: {
+            detailPane
+        }
+        .frame(minWidth: 760, minHeight: 460)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .task {
+            await viewModel.load()
+        }
+    }
+
+    // MARK: - Sidebar
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                DevClipSectionHeader(title: "流水线", systemImage: "wand.and.stars")
+                Spacer()
                 Button {
                     Task { @MainActor in
                         await viewModel.saveSamplePipeline()
                     }
                 } label: {
-                    Label("保存示例流水线", systemImage: "plus")
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                .padding(.horizontal)
-                .padding(.top)
-
-                List(selection: $viewModel.selectedPipelineID) {
-                    ForEach(viewModel.pipelines) { pipeline in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(pipeline.name)
-                                .lineLimit(1)
-                            Text("\(pipeline.steps.count) 个步骤")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .tag(Optional(pipeline.id))
-                    }
-                }
-                .scrollContentBackground(.hidden)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("保存示例流水线")
             }
-            .navigationTitle("流水线")
-        } detail: {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Picker("输入记录", selection: $viewModel.selectedEntryID) {
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+
+            List(selection: $viewModel.selectedPipelineID) {
+                ForEach(viewModel.pipelines) { pipeline in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.accentColor)
+                            Text(pipeline.name)
+                                .font(.system(size: 13, weight: .semibold))
+                                .lineLimit(1)
+                        }
+                        Text("\(pipeline.steps.count) 个步骤")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .tag(Optional(pipeline.id))
+                    .padding(.vertical, 2)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .overlay {
+                if viewModel.pipelines.isEmpty {
+                    ContentUnavailableView("暂无流水线", systemImage: "wand.and.stars")
+                }
+            }
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    // MARK: - Detail Pane
+
+    private var detailPane: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Toolbar
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    DevClipSectionHeader(title: "输入记录", systemImage: "doc.text")
+                    Picker("", selection: $viewModel.selectedEntryID) {
                         ForEach(viewModel.entries) { entry in
                             Text(entry.title).tag(Optional(entry.id))
                         }
                     }
-                    .frame(minWidth: 260)
+                    .labelsHidden()
+                    .frame(minWidth: 240)
+                }
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("").font(.system(size: 13))
                     Button {
                         Task { @MainActor in
                             await viewModel.runPreview()
                         }
                     } label: {
-                        Label("运行预览", systemImage: "play")
+                        Label("运行预览", systemImage: "play.fill")
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                     .disabled(viewModel.selectedPipelineID == nil || viewModel.selectedEntryID == nil)
+                }
+
+                Spacer()
+            }
+            .padding(16)
+
+            Divider()
+
+            // Pipeline steps
+            if let pipeline = viewModel.selectedPipeline {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.accentColor)
+                    Text(pipeline.name)
+                        .font(.system(size: 13, weight: .semibold))
+
+                    Divider().frame(height: 12)
+
+                    HStack(spacing: 4) {
+                        ForEach(pipeline.steps.sorted(by: { $0.order < $1.order })) { step in
+                            Text(step.actionID)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        .fill(.quaternary)
+                                )
+                        }
+                    }
 
                     Spacer()
                 }
-
-                if let pipeline = viewModel.selectedPipeline {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(pipeline.name)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                        ForEach(pipeline.steps.sorted(by: { $0.order < $1.order })) { step in
-                            Label(step.actionID, systemImage: "arrow.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } else {
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.thinMaterial)
+            } else {
+                HStack {
+                    Spacer()
                     ContentUnavailableView("暂无流水线", systemImage: "wand.and.stars")
+                    Spacer()
                 }
+                .padding(20)
+            }
 
-                Divider()
+            Divider()
 
-                Text("预览结果")
-                    .font(.headline)
+            // Preview result
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    DevClipSectionHeader(title: "预览结果", systemImage: "eye")
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+
                 ScrollView {
-                    Text(viewModel.previewText)
+                    Text(viewModel.previewText.isEmpty ? "点击「运行预览」查看转换结果" : viewModel.previewText)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(viewModel.previewText.isEmpty ? .tertiary : .primary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
+                        .padding(14)
                 }
-                .devClipPanel()
-
-                if !viewModel.statusMessage.isEmpty {
-                    Text(viewModel.statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .frame(maxHeight: .infinity)
+                .background(Color(nsColor: .textBackgroundColor))
             }
-            .padding(20)
+
+            // Status bar
+            if !viewModel.statusMessage.isEmpty {
+                Divider()
+                HStack {
+                    Text(viewModel.statusMessage)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.thinMaterial.opacity(0.5))
+            }
         }
-        .frame(minWidth: 760, minHeight: 460)
-        .background(DevClipWorkspaceBackground())
-        .task {
-            await viewModel.load()
-        }
+        .background(Color(nsColor: .textBackgroundColor))
     }
 }
+
+// MARK: - View Model
 
 @MainActor
 final class TransformPreviewViewModel: ObservableObject {

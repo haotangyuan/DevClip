@@ -80,6 +80,8 @@ struct Phase1ClipboardTests {
 
     @Test
     func writeGuardIgnoresRecordedChangeCountOnce() async throws {
+        // Clear any persisted marker from previous test runs
+        UserDefaults.standard.removeObject(forKey: "devclip.writeGuard.lastMarker")
         let guardActor = ClipboardWriteGuard()
         let marker = ClipboardWriteMarker(
             transactionID: UUID(),

@@ -21,18 +21,21 @@ struct ClipboardStackRootView: View {
                     Label("片段", systemImage: "text.quote")
                 }
         }
-        .padding(20)
+        .formStyle(.grouped)
         .frame(minWidth: 680, minHeight: 420)
-        .background(DevClipWorkspaceBackground())
+        .background(Color(nsColor: .windowBackgroundColor))
         .task {
             await viewModel.refresh()
             selection = viewModel.stacks.first?.id
         }
     }
 
+    // MARK: - Stack Tab
+
     private var stackTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
+        VStack(alignment: .leading, spacing: 0) {
+            // Toolbar
+            HStack(spacing: 10) {
                 Button {
                     Task { @MainActor in
                         selection = await viewModel.createStackFromRecentEntries()
@@ -40,83 +43,173 @@ struct ClipboardStackRootView: View {
                 } label: {
                     Label("用最近记录创建栈", systemImage: "plus")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
 
                 Button {
-                    guard let selection else {
-                        return
-                    }
-
+                    guard let selection else { return }
                     Task { @MainActor in
                         await viewModel.pasteNext(stackID: selection)
                     }
                 } label: {
                     Label("粘贴下一个", systemImage: "arrow.down.doc")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(selection == nil)
 
                 Spacer()
             }
+            .padding(14)
 
-            HStack(alignment: .top, spacing: 18) {
+            Divider()
+
+            // Content
+            HStack(spacing: 0) {
+                // Stack list
                 List(selection: $selection) {
                     ForEach(viewModel.stacks) { stack in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(stack.name)
-                                .lineLimit(1)
-                            Text("\(stack.entryIDs.count) 条记录，下一条：\(stack.currentIndex + 1)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.stack.3d.up.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color.accentColor)
+                                Text(stack.name)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .lineLimit(1)
+                            }
+                            HStack(spacing: 4) {
+                                Text("\(stack.entryIDs.count) 条记录")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                Text("·")
+                                    .foregroundStyle(.tertiary)
+                                Text("下一条：\(stack.currentIndex + 1)")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                         .tag(stack.id)
+                        .padding(.vertical, 2)
                     }
                 }
-                .frame(minWidth: 220)
+                .frame(width: 220)
                 .scrollContentBackground(.hidden)
+                .background(Color(nsColor: .controlBackgroundColor))
 
+                Divider()
+
+                // Stack detail
                 stackDetail
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .background(Color(nsColor: .textBackgroundColor))
             }
 
-            statusText
+            // Status
+            if !viewModel.statusMessage.isEmpty {
+                Divider()
+                HStack {
+                    Text(viewModel.statusMessage)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.thinMaterial.opacity(0.5))
+            }
         }
     }
 
     @ViewBuilder
     private var stackDetail: some View {
         if let stack = viewModel.stack(id: selection) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(stack.name)
-                    .font(.title3)
-                    .fontWeight(.semibold)
+            VStack(alignment: .leading, spacing: 0) {
+                // Header
+                HStack(spacing: 8) {
+                    Image(systemName: "square.stack.3d.up.fill")
+                        .foregroundStyle(Color.accentColor)
+                    Text(stack.name)
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("\(stack.entryIDs.count) 条")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.quaternary))
+                }
+                .padding(16)
 
-                ForEach(Array(stack.entryIDs.enumerated()), id: \.element) { index, entryID in
-                    HStack(spacing: 8) {
-                        Text(index == stack.currentIndex ? "下一条" : "\(index + 1)")
-                            .font(.caption)
-                            .foregroundStyle(index == stack.currentIndex ? .primary : .secondary)
-                            .frame(width: 44, alignment: .trailing)
+                Divider()
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(viewModel.title(for: entryID))
-                                .lineLimit(1)
-                            Text(viewModel.preview(for: entryID))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                // Entries
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array(stack.entryIDs.enumerated()), id: \.element) { index, entryID in
+                            HStack(spacing: 10) {
+                                // Index indicator
+                                ZStack {
+                                    Circle()
+                                        .fill(index == stack.currentIndex ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary))
+                                        .frame(width: 24, height: 24)
+                                    Text(index == stack.currentIndex ? "▶" : "\(index + 1)")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(index == stack.currentIndex ? .white : .secondary)
+                                }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(viewModel.title(for: entryID))
+                                        .font(.system(size: 13))
+                                        .lineLimit(1)
+                                    Text(viewModel.preview(for: entryID))
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer()
+
+                                if index == stack.currentIndex {
+                                    Text("下一条")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(Color.accentColor)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(
+                                            Capsule().fill(Color.accentColor.opacity(0.12))
+                                        )
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+
+                            if index < stack.entryIDs.count - 1 {
+                                Divider().padding(.leading, 42)
+                            }
                         }
                     }
-                    .padding(.vertical, 2)
                 }
-
-                Spacer()
             }
         } else {
-            ContentUnavailableView("暂无剪贴板栈", systemImage: "square.stack.3d.up")
+            VStack(spacing: 12) {
+                Image(systemName: "square.stack.3d.up")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.tertiary)
+                Text("暂无剪贴板栈")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                Text("点击上方按钮从最近记录创建")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
+    // MARK: - Snippets Tab
+
     private var snippetsTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Button {
                     Task { @MainActor in
@@ -125,35 +218,56 @@ struct ClipboardStackRootView: View {
                 } label: {
                     Label("将最新记录保存为片段", systemImage: "plus")
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
 
                 Spacer()
             }
+            .padding(14)
+
+            Divider()
 
             List(viewModel.snippets) { snippet in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(snippet.title)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Image(systemName: "text.quote")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.accentColor)
+                        Text(snippet.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+                    }
                     Text(snippet.content)
-                        .font(.caption)
+                        .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
+                .padding(.vertical, 4)
             }
             .scrollContentBackground(.hidden)
+            .overlay {
+                if viewModel.snippets.isEmpty {
+                    ContentUnavailableView("暂无片段", systemImage: "text.quote")
+                }
+            }
 
-            statusText
-        }
-    }
-
-    @ViewBuilder
-    private var statusText: some View {
-        if !viewModel.statusMessage.isEmpty {
-            Text(viewModel.statusMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if !viewModel.statusMessage.isEmpty {
+                Divider()
+                HStack {
+                    Text(viewModel.statusMessage)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.thinMaterial.opacity(0.5))
+            }
         }
     }
 }
+
+// MARK: - View Model
 
 @MainActor
 final class ClipboardStackViewModel: ObservableObject {
