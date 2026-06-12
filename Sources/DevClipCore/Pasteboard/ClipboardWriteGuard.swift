@@ -23,9 +23,12 @@ public actor ClipboardWriteGuard {
     private var markersByTransactionID: [UUID: ClipboardWriteMarker] = [:]
     private var transactionIDsByChangeCount: [Int: UUID] = [:]
     private var transactionIDsByHash: [String: UUID] = [:]
+    private let persistMarkers: Bool
 
-    public init() {
-        if let marker = Self.loadPersistedMarker() {
+    public init(persistMarkers: Bool = true) {
+        self.persistMarkers = persistMarkers
+
+        if persistMarkers, let marker = Self.loadPersistedMarker() {
             markersByTransactionID[marker.transactionID] = marker
             if let changeCount = marker.changeCount {
                 transactionIDsByChangeCount[changeCount] = marker.transactionID
@@ -49,7 +52,9 @@ public actor ClipboardWriteGuard {
             transactionIDsByHash[contentHash] = marker.transactionID
         }
 
-        Self.persistMarker(marker)
+        if persistMarkers {
+            Self.persistMarker(marker)
+        }
     }
 
     public func shouldIgnore(changeCount: Int, contentHash: String?) async throws -> Bool {

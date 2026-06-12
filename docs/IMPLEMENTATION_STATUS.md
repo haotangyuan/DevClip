@@ -6,6 +6,23 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 
 状态：完成。
 
+## 最新修复和体验优化
+
+- 修复历史窗口图片记录无法正常预览的问题：
+  - 新增 `ClipboardImagePreviewService`，统一从 inline data、原始图片 Blob、内部缩略图 Blob 和文件引用读取图片数据。
+  - 历史列表优先加载缩略图，详情页优先加载原始图片。
+  - 图片不可解析时显示明确中文错误，而不是空白预览区。
+- 优化主窗口、Quick Panel 和设置页视觉：
+  - 接入统一的 DevClip 工作台背景、半透明面板和更清晰的预览区域。
+  - 历史详情页增加“图片预览 / 内容预览”分区标题和状态反馈。
+  - Quick Panel 和主要窗口统一使用更柔和的材质背景。
+- 拆分历史窗口和快速面板 View：
+  - `HistoryRootView` 只负责布局组装。
+  - 侧边栏、列表、详情、Quick Panel 行组件拆到独立文件，单个主要 View 均保持在 300 行以内。
+- 稳定 `ClipboardWriteGuard` 测试：
+  - 生产默认仍持久化内部写入标记。
+  - 单元测试可关闭 UserDefaults 持久化，避免跨测试运行污染。
+
 ## 已完成
 
 - 初始化 Git 仓库。
@@ -543,7 +560,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - `xcode-select -p`：通过，当前路径为 `/Applications/Xcode.app/Contents/Developer`。
 - `swift --version`：通过，Apple Swift version 6.3.2。
 - `swift build`：通过。
-- `swift test`：通过，61 个测试全部通过。
+- `swift test`：通过，63 个测试全部通过。
 - `xcodebuild -runFirstLaunch`：通过，首次启动组件安装成功。
 - `xcodebuild -scheme DevClip -destination 'platform=macOS' build`：通过。
 - `./script/build_and_run.sh --verify`：通过，已生成并启动 SwiftPM GUI app bundle；Info.plist 已写入 `CFBundleIconFile=AppIcon`，bundle 包含 `AppIcon.icns`。
@@ -574,13 +591,18 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - `Sources/DevClip/Support/SettingsViewModel.swift`
 - `Sources/DevClip/Support/WindowID.swift`
 - `Sources/DevClip/Views/HistoryRootView.swift`
+- `Sources/DevClip/Views/HistorySidebarView.swift`
+- `Sources/DevClip/Views/HistoryListPaneView.swift`
+- `Sources/DevClip/Views/HistoryDetailView.swift`
 - `Sources/DevClip/Views/PlaceholderWindowView.swift`
 - `Sources/DevClip/Views/ClipboardStackRootView.swift`
 - `Sources/DevClip/Views/DiffRootView.swift`
 - `Sources/DevClip/Views/QuickPanelView.swift`
+- `Sources/DevClip/Views/QuickPanelRows.swift`
 - `Sources/DevClip/Views/SettingsRootView.swift`
 - `Sources/DevClip/Views/TransformPreviewRootView.swift`
 - `Sources/DevClipCore/BlobStore/BlobStore.swift`
+- `Sources/DevClipCore/BlobStore/ClipboardImagePreviewService.swift`
 - `Sources/DevClipCore/BlobStore/ImageThumbnailGenerator.swift`
 - `Sources/DevClipCore/Classification/ContentClassifier.swift`
 - `Sources/DevClipCore/Database/DatabaseBootstrap.swift`

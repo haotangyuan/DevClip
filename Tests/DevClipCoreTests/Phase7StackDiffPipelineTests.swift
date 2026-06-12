@@ -56,7 +56,7 @@ struct Phase7StackDiffPipelineTests {
         let pasteEngine = PasteEngine(
             repository: repository,
             pasteboardClient: pasteboardClient,
-            writeGuard: ClipboardWriteGuard()
+            writeGuard: ClipboardWriteGuard(persistMarkers: false)
         )
         let stackStore = InMemoryClipboardStackStore()
         let stackService = ClipboardStackService(repository: repository, store: stackStore)

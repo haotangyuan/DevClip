@@ -36,7 +36,7 @@ struct SettingsRootView: View {
         }
         .formStyle(.grouped)
         .frame(width: 580, height: 360)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DevClipWorkspaceBackground())
         .task {
             await viewModel.load()
         }
