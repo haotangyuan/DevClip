@@ -131,7 +131,7 @@ struct Phase6PasteAutomationTests {
         let pasteEngine = PasteEngine(
             repository: repository,
             pasteboardClient: pasteboardClient,
-            writeGuard: ClipboardWriteGuard(),
+            writeGuard: ClipboardWriteGuard(persistMarkers: false),
             automationPreferences: MockPasteAutomationPreferences(isEnabled: false),
             blobStore: blobStore,
             stabilizationDelay: .milliseconds(0)
@@ -210,7 +210,7 @@ private func makePasteFixture(
     let pasteEngine = PasteEngine(
         repository: repository,
         pasteboardClient: pasteboardClient,
-        writeGuard: ClipboardWriteGuard(),
+        writeGuard: ClipboardWriteGuard(persistMarkers: false),
         automationPreferences: MockPasteAutomationPreferences(isEnabled: automaticPasteEnabled),
         accessibilityPermissionClient: accessibilityClient,
         applicationFocusClient: focusClient,

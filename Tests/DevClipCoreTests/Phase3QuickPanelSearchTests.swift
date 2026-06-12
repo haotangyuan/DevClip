@@ -127,7 +127,7 @@ struct Phase3QuickPanelSearchTests {
     func pasteEngineCopyOnlyWritesOriginalRepresentationsAndRecordsGuard() async throws {
         let repository = InMemoryClipboardRepository()
         let pasteboardClient = RecordingPasteboardClient(changeCount: 99)
-        let writeGuard = ClipboardWriteGuard()
+        let writeGuard = ClipboardWriteGuard(persistMarkers: false)
         let pasteEngine = PasteEngine(
             repository: repository,
             pasteboardClient: pasteboardClient,

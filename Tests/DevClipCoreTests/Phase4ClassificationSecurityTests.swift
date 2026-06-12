@@ -128,6 +128,7 @@ struct Phase4ClassificationSecurityTests {
         let monitor = ClipboardMonitor(
             pasteboardClient: EmptyPasteboardClient(),
             repository: repository,
+            writeGuard: ClipboardWriteGuard(persistMarkers: false),
             ephemeralSensitiveStore: ephemeralStore
         )
         let privateKey = """
@@ -155,7 +156,8 @@ struct Phase4ClassificationSecurityTests {
         let repository = InMemoryClipboardRepository()
         let monitor = ClipboardMonitor(
             pasteboardClient: EmptyPasteboardClient(),
-            repository: repository
+            repository: repository,
+            writeGuard: ClipboardWriteGuard(persistMarkers: false)
         )
 
         let result = try await monitor.processSnapshot(

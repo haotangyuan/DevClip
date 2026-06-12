@@ -179,6 +179,86 @@ struct Phase2PersistenceTests {
     }
 
     @Test
+    func imagePreviewServiceLoadsInlineImageRepresentation() async throws {
+        let repository = InMemoryClipboardRepository()
+        let service = ClipboardImagePreviewService(repository: repository, blobStore: nil)
+        let group = ClipboardGroup(sourceAppName: "测试应用", itemCount: 1)
+        let entry = makeEntry(
+            groupID: group.id,
+            title: "旧图片",
+            kind: .image,
+            searchableText: "图片",
+            contentHash: "sha256:inline-image"
+        )
+        let representation = ClipboardRepresentation(
+            entryID: entry.id,
+            pasteboardType: "public.png",
+            uniformTypeIdentifier: "public.png",
+            storageKind: .inlineData,
+            inlineData: Data("inline-image-data".utf8),
+            byteCount: 17
+        )
+
+        try await repository.save(group: group, entries: [entry], representations: [representation])
+
+        let data = try await service.imageData(for: entry, preferThumbnail: false)
+
+        #expect(data == Data("inline-image-data".utf8))
+    }
+
+    @Test
+    func imagePreviewServicePrefersThumbnailForRowsAndOriginalForDetail() async throws {
+        let directory = try TemporaryDirectory()
+        let blobStore = FileSystemBlobStore(rootURL: directory.url.appendingPathComponent("Blobs"))
+        let repository = InMemoryClipboardRepository()
+        let service = ClipboardImagePreviewService(repository: repository, blobStore: blobStore)
+        let original = try await blobStore.store(data: Data("original-image-data".utf8), suggestedExtension: "png")
+        let thumbnail = try await blobStore.store(data: Data("thumbnail-data".utf8), suggestedExtension: "png")
+        let group = ClipboardGroup(sourceAppName: "测试应用", itemCount: 1)
+        let entry = makeEntry(
+            groupID: group.id,
+            title: "Blob 图片",
+            kind: .image,
+            searchableText: "图片",
+            contentHash: "sha256:blob-image",
+            metadata: ClipboardMetadata(values: [
+                "blobPath": original.relativePath,
+                "thumbnailBlobPath": thumbnail.relativePath
+            ])
+        )
+        let originalRepresentation = ClipboardRepresentation(
+            entryID: entry.id,
+            pasteboardType: "public.png",
+            uniformTypeIdentifier: "public.png",
+            storageKind: .blobFile,
+            externalFilePath: original.relativePath,
+            byteCount: original.byteCount,
+            priority: 0
+        )
+        let thumbnailRepresentation = ClipboardRepresentation(
+            entryID: entry.id,
+            pasteboardType: PasteboardInternalTypes.thumbnailPNG,
+            uniformTypeIdentifier: "public.png",
+            storageKind: .blobFile,
+            externalFilePath: thumbnail.relativePath,
+            byteCount: thumbnail.byteCount,
+            priority: 1
+        )
+
+        try await repository.save(
+            group: group,
+            entries: [entry],
+            representations: [originalRepresentation, thumbnailRepresentation]
+        )
+
+        let rowData = try await service.imageData(for: entry, preferThumbnail: true)
+        let detailData = try await service.imageData(for: entry, preferThumbnail: false)
+
+        #expect(rowData == Data("thumbnail-data".utf8))
+        #expect(detailData == Data("original-image-data".utf8))
+    }
+
+    @Test
     func deletingRepositoryEntryTriggersOrphanBlobCleanup() async throws {
         let directory = try TemporaryDirectory()
         let blobStore = FileSystemBlobStore(rootURL: directory.url.appendingPathComponent("Blobs"))
@@ -235,14 +315,16 @@ private struct TemporaryDirectory {
 private func makeEntry(
     groupID: UUID,
     title: String,
+    kind: ClipboardContentKind = .plainText,
     searchableText: String,
     contentHash: String,
-    copyCount: Int = 1
+    copyCount: Int = 1,
+    metadata: ClipboardMetadata = ClipboardMetadata(values: ["snapshotChangeCount": "1"])
 ) -> ClipboardEntry {
     ClipboardEntry(
         groupID: groupID,
         title: title,
-        detectedKind: .plainText,
+        detectedKind: kind,
         sourceAppName: "测试应用",
         sourceBundleIdentifier: "dev.local.Tests",
         contentHash: contentHash,
@@ -252,7 +334,7 @@ private func makeEntry(
         updatedAt: Date(timeIntervalSince1970: 1),
         copyCount: copyCount,
         byteCount: Int64(searchableText.utf8.count),
-        metadata: ClipboardMetadata(values: ["snapshotChangeCount": "1"])
+        metadata: metadata
     )
 }
 

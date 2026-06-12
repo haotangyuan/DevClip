@@ -4,7 +4,20 @@ import SwiftUI
 
 struct DevClipWorkspaceBackground: View {
     var body: some View {
-        Color(nsColor: .windowBackgroundColor)
+        ZStack {
+            Rectangle().fill(.regularMaterial)
+            LinearGradient(
+                colors: [
+                    Color(nsColor: .windowBackgroundColor),
+                    Color.teal.opacity(0.10),
+                    Color.blue.opacity(0.08),
+                    Color.orange.opacity(0.07)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .ignoresSafeArea()
     }
 }
 
@@ -14,12 +27,12 @@ struct DevClipPanelModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.background)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.thinMaterial)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(.separator.opacity(0.3), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(.separator.opacity(0.35), lineWidth: 0.5)
             }
     }
 }
@@ -37,12 +50,12 @@ struct DevClipCardModifier: ViewModifier {
         content
             .padding(14)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.background)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.thinMaterial)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(.separator.opacity(0.3), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(.separator.opacity(0.35), lineWidth: 0.5)
             }
     }
 }

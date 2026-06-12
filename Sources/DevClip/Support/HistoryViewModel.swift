@@ -40,20 +40,24 @@ final class HistoryViewModel: ObservableObject {
     @Published private(set) var entries: [ClipboardEntry] = []
     @Published private(set) var statusMessage = ""
     @Published private(set) var thumbnailImage: NSImage?
+    @Published private(set) var imagePreviewMessage = ""
 
     private var allEntries: [ClipboardEntry] = []
     private let parser = SearchQueryParser()
     private let repository: any ClipboardRepository
     private let searchService: any SearchService
     private let pasteEngine: PasteEngine
-    private let blobStore: (any BlobStore)?
+    private let imagePreviewService: ClipboardImagePreviewService
     private var searchTask: Task<Void, Never>?
 
     init(dependencies: DependencyContainer) {
         self.repository = dependencies.repository
         self.searchService = dependencies.searchService
         self.pasteEngine = dependencies.pasteEngine
-        self.blobStore = dependencies.blobStore
+        self.imagePreviewService = ClipboardImagePreviewService(
+            repository: dependencies.repository,
+            blobStore: dependencies.blobStore
+        )
     }
 
     var selectedEntry: ClipboardEntry? {
@@ -175,41 +179,48 @@ final class HistoryViewModel: ObservableObject {
     }
 
     func loadThumbnail(for entry: ClipboardEntry) async {
-        guard entry.detectedKind == .image, let blobStore else {
+        guard entry.detectedKind == .image else {
             thumbnailImage = nil
-            return
-        }
-
-        // Try thumbnail path first, fall back to main blob path
-        let path = entry.metadata.values["thumbnailBlobPath"]
-            ?? entry.metadata.values["blobPath"]
-
-        guard let path else {
-            thumbnailImage = nil
+            imagePreviewMessage = ""
             return
         }
 
         do {
-            let data = try await blobStore.load(relativePath: path)
-            thumbnailImage = NSImage(data: data)
+            guard
+                let data = try await imagePreviewService.imageData(
+                    for: entry,
+                    preferThumbnail: false
+                ),
+                let image = NSImage(data: data)
+            else {
+                thumbnailImage = nil
+                imagePreviewMessage = "无法解析图片数据"
+                return
+            }
+
+            thumbnailImage = image
+            imagePreviewMessage = ""
         } catch {
             thumbnailImage = nil
+            imagePreviewMessage = "图片预览失败：\(error.localizedDescription)"
         }
     }
 
     func loadThumbnailForRow(entry: ClipboardEntry) async -> NSImage? {
-        guard entry.detectedKind == .image, let blobStore else { return nil }
-        let path = entry.metadata.values["thumbnailBlobPath"]
-            ?? entry.metadata.values["blobPath"]
-        guard let path else { return nil }
-        do {
-            let data = try await blobStore.load(relativePath: path)
-            return NSImage(data: data)
-        } catch {
+        guard entry.detectedKind == .image else { return nil }
+
+        guard
+            let data = try? await imagePreviewService.imageData(
+                for: entry,
+                preferThumbnail: true
+            ),
+            let image = NSImage(data: data)
+        else {
             return nil
         }
-    }
 
+        return image
+    }
     private func applyScope(_ values: [ClipboardEntry]) -> [ClipboardEntry] {
         switch scope {
         case .all:

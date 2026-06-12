@@ -14,7 +14,8 @@ struct Phase1ClipboardTests {
         let repository = InMemoryClipboardRepository()
         let monitor = ClipboardMonitor(
             pasteboardClient: pasteboardClient,
-            repository: repository
+            repository: repository,
+            writeGuard: ClipboardWriteGuard(persistMarkers: false)
         )
 
         let first = try await monitor.pollOnce()
@@ -35,7 +36,8 @@ struct Phase1ClipboardTests {
         let repository = InMemoryClipboardRepository()
         let monitor = ClipboardMonitor(
             pasteboardClient: MockPasteboardClient(),
-            repository: repository
+            repository: repository,
+            writeGuard: ClipboardWriteGuard(persistMarkers: false)
         )
 
         let firstSnapshot = makeSnapshot(changeCount: 1, textItems: ["repeat"])
@@ -57,7 +59,8 @@ struct Phase1ClipboardTests {
         let repository = InMemoryClipboardRepository()
         let monitor = ClipboardMonitor(
             pasteboardClient: MockPasteboardClient(),
-            repository: repository
+            repository: repository,
+            writeGuard: ClipboardWriteGuard(persistMarkers: false)
         )
 
         try await monitor.processSnapshot(makeSnapshot(changeCount: 3, textItems: ["one", "two"]))
@@ -82,7 +85,7 @@ struct Phase1ClipboardTests {
     func writeGuardIgnoresRecordedChangeCountOnce() async throws {
         // Clear any persisted marker from previous test runs
         UserDefaults.standard.removeObject(forKey: "devclip.writeGuard.lastMarker")
-        let guardActor = ClipboardWriteGuard()
+        let guardActor = ClipboardWriteGuard(persistMarkers: false)
         let marker = ClipboardWriteMarker(
             transactionID: UUID(),
             contentHash: "sha256:internal",
@@ -103,7 +106,7 @@ struct Phase1ClipboardTests {
     @Test
     func monitorSkipsSnapshotWithInternalWriteMarker() async throws {
         let repository = InMemoryClipboardRepository()
-        let guardActor = ClipboardWriteGuard()
+        let guardActor = ClipboardWriteGuard(persistMarkers: false)
         let transactionID = UUID()
         let marker = ClipboardWriteMarker(
             transactionID: transactionID,
