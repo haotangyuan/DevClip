@@ -100,11 +100,12 @@ public actor TransformEngine {
                 throw DevClipError.timedOut(seconds: seconds)
             }
 
+            defer { group.cancelAll() }
+
             guard let result = try await group.next() else {
                 throw DevClipError.cancelled
             }
 
-            group.cancelAll()
             return result
         }
     }

@@ -1,3 +1,6 @@
+@preconcurrency import GRDB
+import Foundation
+
 /// Production dependency graph. Services remain protocol-isolated for tests.
 public struct DependencyContainer: Sendable {
     public var pasteboardClient: any PasteboardClient
@@ -79,13 +82,50 @@ public struct DependencyContainer: Sendable {
 
     public static func production() -> DependencyContainer {
         let pasteboardClient = SystemPasteboardClient()
-        let repository = InMemoryClipboardRepository()
         let writeGuard = ClipboardWriteGuard()
         let contentClassifier = DefaultContentClassifier()
         let sensitiveDetector = DefaultSensitiveContentDetector()
         let ephemeralSensitiveStore = SensitiveEphemeralStore()
         let transformEngine = TransformEngine()
-        let blobStore = FileSystemBlobStore()
+
+        var blobStore: FileSystemBlobStore
+        var repository: any ClipboardRepository
+        var clipboardStackStore: any ClipboardStackStore
+        var transformPipelineStore: any TransformPipelineStore
+        var snippetStore: any SnippetStore
+
+        do {
+            let fileManager = FileManager.default
+            let applicationSupport = fileManager.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first ?? fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support", isDirectory: true)
+
+            let rootURL = applicationSupport.appendingPathComponent("DevClip", isDirectory: true)
+            try fileManager.createDirectory(at: rootURL, withIntermediateDirectories: true)
+            blobStore = FileSystemBlobStore(
+                rootURL: rootURL.appendingPathComponent("Blobs", isDirectory: true)
+            )
+
+            let databasePool = try DatabaseBootstrap.makePool(
+                at: rootURL.appendingPathComponent("devclip.sqlite").path
+            )
+            repository = GRDBClipboardRepository(
+                databasePool: databasePool,
+                blobStore: blobStore
+            )
+            clipboardStackStore = GRDBClipboardStackStore(databasePool: databasePool)
+            transformPipelineStore = GRDBTransformPipelineStore(databasePool: databasePool)
+            snippetStore = GRDBSnippetStore(databasePool: databasePool)
+        } catch {
+            blobStore = FileSystemBlobStore()
+            repository = InMemoryClipboardRepository()
+            clipboardStackStore = InMemoryClipboardStackStore()
+            transformPipelineStore = InMemoryTransformPipelineStore()
+            snippetStore = InMemorySnippetStore()
+        }
+
         let snapshotBuilder = ClipboardSnapshotBuilder(
             contentClassifier: contentClassifier,
             sensitiveDetector: sensitiveDetector,
@@ -105,13 +145,10 @@ public struct DependencyContainer: Sendable {
             automationPreferences: UserDefaultsPasteAutomationPreferences(),
             blobStore: blobStore
         )
-        let clipboardStackStore = InMemoryClipboardStackStore()
         let clipboardStackService = ClipboardStackService(
             repository: repository,
             store: clipboardStackStore
         )
-        let transformPipelineStore = InMemoryTransformPipelineStore()
-        let snippetStore = InMemorySnippetStore()
         let searchService = SQLiteSearchService(repository: repository)
 
         return DependencyContainer(
@@ -140,7 +177,7 @@ public struct DependencyContainer: Sendable {
             snippetStore: snippetStore,
             snippetLibrary: SnippetLibrary(store: snippetStore),
             diffService: LineDiffService(),
-            launchAtLoginClient: InMemoryLaunchAtLoginClient(),
+            launchAtLoginClient: SystemLaunchAtLoginClient(),
             archiveService: AESGCMClipboardArchiveService(repository: repository),
             archiveFileClient: JSONClipboardArchiveFileClient(),
             searchPerformanceProbe: SearchPerformanceProbe(

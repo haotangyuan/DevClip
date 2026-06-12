@@ -44,6 +44,7 @@ final class HistoryViewModel: ObservableObject {
     private let repository: any ClipboardRepository
     private let searchService: any SearchService
     private let pasteEngine: PasteEngine
+    private var searchTask: Task<Void, Never>?
 
     init(dependencies: DependencyContainer) {
         self.repository = dependencies.repository
@@ -69,6 +70,15 @@ final class HistoryViewModel: ObservableObject {
 
     func load() async {
         await refresh()
+    }
+
+    func debouncedRefresh() {
+        searchTask?.cancel()
+        searchTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
     }
 
     func refresh() async {

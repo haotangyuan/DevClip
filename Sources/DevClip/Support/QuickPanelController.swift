@@ -13,7 +13,7 @@ protocol QuickPanelControlling: AnyObject {
 final class AppKitQuickPanelController: NSObject, QuickPanelControlling {
     private let viewModel: QuickPanelViewModel
     private var panel: QuickPanelWindow?
-    private var eventMonitor: Any?
+    private nonisolated(unsafe) var eventMonitor: Any?
     private var previousApplication: NSRunningApplication?
 
     init(dependencies: DependencyContainer) {
@@ -25,6 +25,12 @@ final class AppKitQuickPanelController: NSObject, QuickPanelControlling {
             diffService: dependencies.diffService
         )
         super.init()
+    }
+
+    deinit {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
     }
 
     func show() {

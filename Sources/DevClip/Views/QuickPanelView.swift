@@ -31,6 +31,9 @@ struct QuickPanelView: View {
         .onAppear {
             isSearchFocused = true
         }
+        .onChange(of: viewModel.focusTrigger) { _, _ in
+            isSearchFocused = true
+        }
         .onChange(of: viewModel.queryText) { _, newValue in
             Task {
                 await viewModel.updateQuery(newValue)

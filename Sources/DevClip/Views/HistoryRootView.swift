@@ -78,9 +78,7 @@ struct HistoryRootView: View {
                 TextField("搜索历史、类型、来源应用", text: $viewModel.queryText)
                     .textFieldStyle(.plain)
                     .onChange(of: viewModel.queryText) { _, _ in
-                        Task { @MainActor in
-                            await viewModel.refresh()
-                        }
+                        viewModel.debouncedRefresh()
                     }
             }
                 .padding(.horizontal, 12)

@@ -58,8 +58,21 @@ public actor SQLiteSearchService: SearchService {
     }
 
     private func searchText(for query: SearchQuery) -> String {
-        (query.terms + query.exactPhrases)
-            .joined(separator: " ")
+        var parts: [String] = []
+
+        for phrase in query.exactPhrases {
+            let escaped = phrase.replacingOccurrences(of: "\"", with: "\"\"")
+            parts.append("\"\(escaped)\"")
+        }
+
+        for term in query.terms {
+            let escaped = term.replacingOccurrences(of: "\"", with: "")
+            if !escaped.isEmpty {
+                parts.append("\"\(escaped)\"")
+            }
+        }
+
+        return parts.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

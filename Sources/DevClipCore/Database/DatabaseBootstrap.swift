@@ -31,14 +31,11 @@ public enum DatabaseBootstrap {
     public static func makePool(at path: String) throws -> DatabasePool {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
+            try db.execute(sql: "PRAGMA journal_mode = WAL")
             try db.execute(sql: "PRAGMA foreign_keys = ON")
         }
 
         let pool = try DatabasePool(path: path, configuration: configuration)
-        try pool.write { db in
-            try db.execute(sql: "PRAGMA journal_mode = WAL")
-            try db.execute(sql: "PRAGMA foreign_keys = ON")
-        }
 
         try migrator.migrate(pool)
         return pool

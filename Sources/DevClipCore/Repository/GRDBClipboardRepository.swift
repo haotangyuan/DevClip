@@ -130,12 +130,23 @@ public actor GRDBClipboardRepository: FTSClipboardRepository {
             return []
         }
 
-        let sanitized = Self.sanitizeFTSQuery(trimmed)
-        guard !sanitized.isEmpty else {
-            return []
+        let query: String
+        if trimmed.contains("\"") {
+            // Input already contains quoted phrases (e.g. from SearchService)
+            // Strip dangerous FTS5 operators but preserve quotes
+            let stripped = trimmed.unicodeScalars.filter { scalar in
+                !CharacterSet(charactersIn: "*+-(){}^:\\").contains(scalar)
+            }
+            query = String(String(stripped))
+        } else {
+            // Plain text input: sanitize and wrap as single phrase
+            let sanitized = Self.sanitizeFTSQuery(trimmed)
+            guard !sanitized.isEmpty else {
+                return []
+            }
+            query = "\"\(sanitized.replacingOccurrences(of: "\"", with: "\"\""))\""
         }
 
-        let query = "\"\(sanitized.replacingOccurrences(of: "\"", with: "\"\""))\""
         return try await databasePool.read { db in
             try Row.fetchAll(
                 db,

@@ -21,6 +21,7 @@ final class QuickPanelViewModel: ObservableObject {
     @Published private(set) var statusMessage = ""
     @Published var isPreviewVisible = false
     @Published private(set) var mode: Mode = .history
+    @Published var focusTrigger = 0
 
     private let parser: any SearchQueryParsing
     private let searchService: any SearchService
@@ -30,6 +31,7 @@ final class QuickPanelViewModel: ObservableObject {
     private let diffService: any DiffService
     private var currentAppBundleIdentifier: String?
     private var diffBaseEntry: ClipboardEntry?
+    private var searchTask: Task<Void, Never>?
 
     init(
         parser: any SearchQueryParsing = SearchQueryParser(),
@@ -87,12 +89,18 @@ final class QuickPanelViewModel: ObservableObject {
         diffPreviewText = ""
         diffBaseEntry = nil
         diffBaseTitle = nil
+        focusTrigger += 1
         await refresh()
     }
 
     func updateQuery(_ query: String) async {
         queryText = query
-        await refresh()
+        searchTask?.cancel()
+        searchTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
     }
 
     func refresh() async {
