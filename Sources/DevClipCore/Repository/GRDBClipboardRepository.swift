@@ -130,7 +130,12 @@ public actor GRDBClipboardRepository: FTSClipboardRepository {
             return []
         }
 
-        let query = "\"\(trimmed.replacingOccurrences(of: "\"", with: "\"\""))\""
+        let sanitized = Self.sanitizeFTSQuery(trimmed)
+        guard !sanitized.isEmpty else {
+            return []
+        }
+
+        let query = "\"\(sanitized.replacingOccurrences(of: "\"", with: "\"\""))\""
         return try await databasePool.read { db in
             try Row.fetchAll(
                 db,
@@ -344,6 +349,15 @@ public actor GRDBClipboardRepository: FTSClipboardRepository {
         )
 
         return Set(paths)
+    }
+
+    private static func sanitizeFTSQuery(_ input: String) -> String {
+        let fts5SpecialCharacters: CharacterSet = [
+            "*", "+", "-", "(", ")", "{", "}", "^", ":", "\\", "\"",
+            "\u{201C}", "\u{201D}"
+        ]
+        let cleaned = input.unicodeScalars.filter { !fts5SpecialCharacters.contains($0) }
+        return String(String(cleaned).filter { $0 != "\"" }).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func sqlPlaceholders(count: Int) -> String {

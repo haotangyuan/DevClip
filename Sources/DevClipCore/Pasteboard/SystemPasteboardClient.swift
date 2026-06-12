@@ -11,27 +11,36 @@ public struct SystemPasteboardClient: PasteboardClient {
     }
 
     public func changeCount() async throws -> Int {
-        NSPasteboard.general.changeCount
+        await MainActor.run { NSPasteboard.general.changeCount }
     }
 
     public func readSnapshot() async throws -> ClipboardSnapshot {
-        let pasteboard = NSPasteboard.general
-        let items = pasteboard.pasteboardItems ?? []
-        let snapshots = items.map(readItemSnapshot).filter { !$0.representations.isEmpty }
-        let marker = readInternalMarker(from: items, changeCount: pasteboard.changeCount)
-        let sourceApplication = NSWorkspace.shared.frontmostApplication
+        let captured = await MainActor.run {
+            let pasteboard = NSPasteboard.general
+            let items = pasteboard.pasteboardItems ?? []
+            let changeCount = pasteboard.changeCount
+            let sourceApplication = NSWorkspace.shared.frontmostApplication
+            let snapshots = items.map(self.readItemSnapshot).filter { !$0.representations.isEmpty }
+            let marker = self.readInternalMarker(from: items, changeCount: changeCount)
+            return (
+                changeCount: changeCount,
+                snapshots: snapshots,
+                sourceAppName: sourceApplication?.localizedName,
+                sourceBundleIdentifier: sourceApplication?.bundleIdentifier,
+                marker: marker
+            )
+        }
 
         return ClipboardSnapshot(
-            changeCount: pasteboard.changeCount,
-            items: snapshots,
-            sourceAppName: sourceApplication?.localizedName,
-            sourceBundleIdentifier: sourceApplication?.bundleIdentifier,
-            internalWriteMarker: marker
+            changeCount: captured.changeCount,
+            items: captured.snapshots,
+            sourceAppName: captured.sourceAppName,
+            sourceBundleIdentifier: captured.sourceBundleIdentifier,
+            internalWriteMarker: captured.marker
         )
     }
 
     public func write(_ request: PasteboardWriteRequest) async throws -> PasteboardWriteReceipt {
-        let pasteboard = NSPasteboard.general
         let contentHash = request.contentHash ?? hash(request.items)
         let pasteboardItems = request.items.map { itemSnapshot in
             let item = NSPasteboardItem()
@@ -59,16 +68,20 @@ public struct SystemPasteboardClient: PasteboardClient {
             return item
         }
 
-        pasteboard.clearContents()
-        let didWrite = pasteboard.writeObjects(pasteboardItems)
-        guard didWrite else {
-            throw DevClipError.invalidInput(reason: "Failed to write pasteboard items.")
+        let receipt = try await MainActor.run {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            let didWrite = pasteboard.writeObjects(pasteboardItems)
+            guard didWrite else {
+                throw DevClipError.invalidInput(reason: "Failed to write pasteboard items.")
+            }
+            return PasteboardWriteReceipt(
+                transactionID: request.transactionID,
+                changeCount: pasteboard.changeCount
+            )
         }
 
-        return PasteboardWriteReceipt(
-            transactionID: request.transactionID,
-            changeCount: pasteboard.changeCount
-        )
+        return receipt
     }
 
     private func readItemSnapshot(_ item: NSPasteboardItem) -> PasteboardItemSnapshot {

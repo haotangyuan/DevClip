@@ -147,7 +147,28 @@ public actor PasteEngine {
             throw DevClipError.invalidInput(reason: "找不到剪贴板记录。")
         }
 
-        let text = entry.searchableText.isEmpty ? entry.previewText : entry.searchableText
+        let representations = try await repository.representations(entryID: entryID)
+        let textTypes = [
+            "public.utf8-plain-text",
+            "public.plain-text",
+            "public.text",
+            "NSStringPboardType"
+        ]
+
+        let text: String
+        if
+            let textRepresentation = representations.first(where: { rep in
+                textTypes.contains(rep.pasteboardType)
+                    && !PasteboardInternalTypes.isInternal(rep.pasteboardType)
+            }),
+            let inlineData = textRepresentation.inlineData,
+            let decoded = String(data: inlineData, encoding: .utf8)
+        {
+            text = decoded
+        } else {
+            text = entry.searchableText.isEmpty ? entry.previewText : entry.searchableText
+        }
+
         guard let data = text.data(using: .utf8) else {
             throw DevClipError.invalidInput(reason: "无法编码纯文本。")
         }
