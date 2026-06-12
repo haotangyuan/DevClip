@@ -1,0 +1,646 @@
+# DevClip 实施状态
+
+## 当前阶段
+
+Phase 8：设置、导入导出、性能优化和发布准备。
+
+状态：完成。
+
+## 已完成
+
+- 初始化 Git 仓库。
+- 创建 SwiftPM 包。
+- 配置最低 macOS 14。
+- 配置 Swift 6 language mode 和严格并发检查参数。
+- 配置 GRDB 和 KeyboardShortcuts 依赖。
+- 创建 `DevClipCore` 库 Target。
+- 创建 `DevClip` SwiftUI/AppKit 可执行 Target。
+- 创建 `DevClipCoreTests` 测试 Target。
+- 创建 `MenuBarExtra`、历史窗口、设置窗口、转换预览窗口、Diff 窗口和 Clipboard Stack 窗口骨架。
+- 创建 AppKit Quick Panel 控制器边界。
+- 创建核心模型：
+  - `ClipboardEntry`
+  - `ClipboardRepresentation`
+  - `ClipboardGroup`
+  - `ClipboardTag`
+  - `ClipboardCollection`
+  - `TransformDefinition`
+  - `TransformPipeline`
+  - `TransformExecution`
+  - `ClipboardStack`
+  - `SensitiveClassification`
+- 创建协议和明确占位实现：
+  - `PasteboardClient`
+  - `ClipboardMonitor`
+  - `ClipboardWriteGuard`
+  - `ClipboardRepository`
+  - `ContentClassifier`
+  - `SensitiveContentDetecting`
+  - `TransformAction`
+  - `TransformEngine`
+  - `SearchService`
+  - `SearchQueryParser`
+  - `BlobStore`
+  - `PasteEngine`
+  - `UpdateCheckingClient`
+- 创建 `script/build_and_run.sh`。
+- 创建 `.codex/environments/environment.toml` Run action。
+- 创建 Phase 0 smoke tests。
+- `swift build` 通过。
+- `./script/build_and_run.sh --verify` 通过，已生成并启动 SwiftPM GUI app bundle。
+- 已检测到完整 Xcode：`/Applications/Xcode.app`。
+- `xcode-select` 当前指向 `/Applications/Xcode.app/Contents/Developer`。
+- 已运行 `xcodebuild -runFirstLaunch` 完成 Xcode 首次启动组件安装。
+- `swift test` 通过。
+- `xcodebuild -scheme DevClip -destination 'platform=macOS' build` 通过。
+- 实现 `SystemPasteboardClient`：
+  - 使用 `NSPasteboard.general.changeCount` 判断变化。
+  - 一次读取当前复制操作中的所有 `NSPasteboardItem`。
+  - 保存每个 item 的所有可读取 data 表示。
+  - 读取前台应用名称和 bundle identifier。
+  - 写入 DevClip 内部 transaction、content hash 和 marker version pasteboard type。
+  - 对单个 representation 设置 10MB 默认大小限制。
+- 实现 `ClipboardContentHasher`，对 item 和 snapshot 生成稳定 SHA-256 Hash。
+- 实现 `ClipboardWriteGuard`，支持 transaction、changeCount 和受限 hash 匹配，内部写入只忽略一次。
+- 实现 `ClipboardSnapshotBuilder`，将 snapshot 转为 `ClipboardGroup`、`ClipboardEntry` 和 `ClipboardRepresentation`。
+- 实现 `ClipboardMonitor`：
+  - actor 隔离。
+  - 后台 `Task.detached` 轮询。
+  - 默认 350ms 活跃轮询间隔。
+  - 空闲后降频到 1 秒。
+  - 支持 `pollOnce` 和 `processSnapshot` 便于单元测试。
+  - 保存最近一次错误摘要，不记录剪贴板正文。
+- 实现 `InMemoryClipboardRepository`：
+  - 内存保存 group、entry 和 representation。
+  - 通过 content hash 合并重复复制。
+  - 支持查询 entries、groups、representations 和删除 entry。
+- 新增 Phase 1 测试：
+  - Clipboard 去重测试。
+  - ClipboardWriteGuard 测试。
+  - 多 Pasteboard Item 分组测试。
+  - ClipboardMonitor changeCount 轮询测试。
+  - 内部写入防重复测试。
+  - 稳定 Hash 测试。
+- 实现 GRDB 数据库启动：
+  - 创建 `DatabasePool`。
+  - 启用 WAL。
+  - 启用 Foreign Keys。
+  - 使用 `DatabaseMigrator` 管理迁移。
+  - 使用参数化 SQL。
+- 创建 SQLite 表：
+  - `clipboard_entries`
+  - `clipboard_representations`
+  - `clipboard_groups`
+  - `tags`
+  - `entry_tags`
+  - `collections`
+  - `collection_entries`
+  - `transform_pipelines`
+  - `transform_steps`
+  - `transform_executions`
+  - `clipboard_stacks`
+  - `settings_metadata`
+  - `clipboard_fts`
+- 创建 `clipboard_fts` FTS5 trigram 虚拟表。
+- 实现 `GRDBClipboardRepository`：
+  - 持久化 group、entry 和 representation。
+  - 通过 content hash 合并重复复制。
+  - 同步维护 FTS。
+  - 支持 FTS 搜索。
+  - 删除 entry 时触发孤立 Blob 清理。
+- 实现 `FileSystemBlobStore`：
+  - 默认写入 Application Support/DevClip/Blobs。
+  - 按 SHA-256 内容 Hash 命名。
+  - 支持测试注入根目录。
+  - 支持孤立 Blob 清理。
+- 新增 Phase 2 测试：
+  - 数据库迁移和 PRAGMA 测试。
+  - GRDB Repository 持久化和去重测试。
+  - FTS trigram 搜索测试。
+  - Blob Store 孤立文件清理测试。
+  - 删除记录触发 Blob 清理测试。
+- 将当前已存在的用户可见 UI 文案改为中文。
+- 将生产运行时切换为 Application Support 下的 GRDB SQLite 数据库和 Blob Store：
+  - 默认数据库路径为 `~/Library/Application Support/DevClip/devclip.sqlite`。
+  - Blob 根目录为 `~/Library/Application Support/DevClip/Blobs`。
+  - 启动失败时降级到内存仓储，并在菜单中显示短状态。
+- 实现 `FTSClipboardRepository` 协议能力，让搜索服务依赖 FTS 能力而不是具体 GRDB 类型。
+- 实现 `SearchQueryParser`：
+  - 支持普通关键词。
+  - 支持精确短语。
+  - 支持 `type:`、`app:`、`is:pinned`、`is:sensitive`、`before:`、`after:` 和 `#tag`。
+  - 未识别过滤器退回普通关键词。
+- 实现 `SQLiteSearchService`：
+  - 长查询优先使用 FTS5。
+  - 1～2 个字符查询回退到模型过滤。
+  - 应用结构化过滤器。
+  - 按文本匹配、置顶、当前来源应用、使用次数和时间综合排序。
+- 实现 Phase 3 `PasteEngine` 基础能力：
+  - `copyOnly` 将原始 inline/file reference 表示写回剪贴板。
+  - `pastePlainText` 在 Phase 3 先写回纯文本但不模拟粘贴；Phase 6 已升级为按需自动粘贴。
+  - 写回后记录 `ClipboardWriteGuard` 标记，避免后台监听重复采集。
+  - `pasteOriginal`、`pasteSpecificRepresentation` 和 CGEvent 自动粘贴已在 Phase 6 补齐。
+- 实现 App 运行时：
+  - `AppRuntime` 统一持有依赖容器、启动剪贴板监听、注册全局快捷键。
+  - `KeyboardShortcuts` 注册 `Command+Shift+Space` 显示 Quick Panel。
+- 实现 AppKit Quick Panel：
+  - 使用 `NSPanel` 和 `NSHostingController`。
+  - 显示前记录原前台应用，关闭后恢复。
+  - 支持输入即搜索。
+  - 支持上下键选择。
+  - 支持 Return 原始格式自动粘贴。
+  - 支持 Command+Return 只写回剪贴板。
+  - 支持 Shift+Return 纯文本自动粘贴。
+  - 支持 Command+K 打开真实动作面板。
+  - 支持 Command+D 进入两段式 Diff 选择并生成差异预览。
+  - 支持 Tab 在历史和 Action 之间切换。
+  - 支持 Command+P 固定/取消固定。
+  - 支持 Space 显示/隐藏完整预览。
+  - 支持 Delete 删除。
+  - 支持 Escape 关闭并恢复原应用。
+- 实现 SwiftUI Quick Panel 内容：
+  - 搜索框。
+  - 结果列表。
+  - 状态栏。
+  - 预览区域。
+  - 用户可见文案使用中文。
+- 新增 Phase 3 测试：
+  - SearchQueryParser 语法测试。
+  - 未识别过滤器回退测试。
+  - SearchService 文本和结构化过滤测试。
+  - 1～2 字符查询回退测试。
+  - Repository 置顶更新测试。
+  - PasteEngine copyOnly 写回和 WriteGuard 记录测试。
+- 实现 `DefaultContentClassifier`：
+  - 使用多个小型 Detector，而不是单个巨大函数。
+  - Detector 包含表示类型、标识符文本、编码数据、结构化文本和代码文本。
+  - 支持候选类型、置信度和证据标签。
+  - 单个 Detector 抛错时不中断整体分类。
+  - 对候选按类型去重，最高置信度作为 `detectedKind`。
+  - 其他候选类型写入 entry metadata。
+- Phase 4 首版分类覆盖：
+  - `plainText`
+  - `url`
+  - `email`
+  - `filePath`
+  - `json`
+  - `jwt`
+  - `base64`
+  - `dataURI`
+  - `uuid`
+  - `unixTimestamp`
+  - `isoDate`
+  - `hex`
+  - `hash`
+  - `pem`
+  - `privateKey`
+  - `environmentVariables`
+  - `shellCommand`
+  - `xml`
+  - `html`
+  - `markdown`
+  - `csv`
+  - `color`
+  - `ipAddress`
+  - `gitCommit`
+  - `gitDiff`
+  - `stackTrace`
+  - `sourceCode`
+  - `image`
+  - `fileList`
+  - `binary`
+- 实现 `DefaultSensitiveContentDetector`：
+  - 检测 PEM Private Key。
+  - 检测 Bearer Token。
+  - 检测 JWT。
+  - 检测常见 API Key/Secret/Token/Password 赋值。
+  - 检测 AWS Access Key。
+  - 检测 GitHub Token。
+  - 检测数据库连接串用户名密码。
+  - 检测 `.env` 密钥。
+  - 检测高熵长字符串。
+  - 检测验证码。
+  - 检测密码管理器和钥匙串来源应用。
+- 实现敏感内容策略：
+  - `none` 正常保存。
+  - `potential` 默认遮罩，设置 10 分钟过期，允许持久化。
+  - `secret` 默认不持久化、不进入 FTS，只保留在内存并设置 60 秒过期。
+  - 忽略来源应用默认不持久化，也不进入短期内存缓存。
+  - 敏感元数据只记录证据标签，不记录完整剪贴板正文。
+- 实现 `IgnoredSourceApplicationPolicy`：
+  - 默认包含 Keychain Access、Passwords、1Password、Bitwarden、KeePassXC、LastPass。
+  - 支持通过 bundle identifier 集合和片段集合扩展忽略规则。
+- 实现 `SensitiveEphemeralStore`：
+  - actor 隔离。
+  - 保存 secret 记录和表示到内存。
+  - 默认 60 秒清理。
+- 将 Phase 4 接入采集链路：
+  - `ClipboardSnapshotBuilder` 改为异步构建。
+  - 每个 pasteboard item 先分类，再做敏感检测。
+  - `ClipboardEntry.detectedKind` 使用分类结果。
+  - `ClipboardEntry.metadata` 保存候选类型、证据标签、敏感等级和索引策略。
+  - potential/secret 预览和 searchable text 默认遮罩。
+  - secret 从持久化 entries 中分离到 protected entries。
+- 扩展 Repository 过期清理：
+  - `ClipboardRepository.deleteExpiredEntries(now:)`。
+  - `InMemoryClipboardRepository` 清理过期 entry。
+  - `GRDBClipboardRepository` 清理过期 entry、FTS 和孤立 Blob。
+- 更新 FTS 策略：
+  - `metadata["shouldIndex"] == "false"` 的 entry 不写入 `clipboard_fts`。
+  - 搜索服务过滤已过期 entry。
+- 新增 Phase 4 测试：
+  - 内容分类覆盖测试。
+  - 图片和文件列表分类测试。
+  - Detector 抛错不中断测试。
+  - secret token 检测测试。
+  - 验证码 potential 策略测试。
+  - 密码管理器来源忽略测试。
+  - secret 只进内存不持久化测试。
+  - potential 遮罩和过期测试。
+  - Repository 过期清理测试。
+  - `shouldIndex=false` 不进入 FTS 测试。
+- 实现 Phase 5 `TransformEngine`：
+  - 注册内置无状态 `TransformAction`。
+  - 根据 `TransformInput` 返回 Smart Actions。
+  - 支持单个 action 执行。
+  - 支持超时。
+  - 支持取消检查。
+  - 返回结构化 `DevClipError`。
+  - 不直接修改原始 `ClipboardEntry`。
+  - 返回 `TransformResult` 供 UI 预览。
+  - 支持最小核心 `TransformPipeline` 顺序执行，用于组合内置转换；Pipeline UI、保存和管理仍留到 Phase 7。
+- 新增转换注册表和通用工具：
+  - `BuiltInTransformActions`
+  - `TransformInput.effectiveText`
+  - `TransformOptions` 读取工具
+  - 文本结果和二进制预览工具
+- 实现 Base64 转换：
+  - `base64.standard.encode`
+  - `base64.standard.decode`
+  - `base64.urlSafe.encode`
+  - `base64.urlSafe.decode`
+  - `base64.dataURI.encode`
+  - `base64.dataURI.decode`
+  - 默认 UTF-8 文本。
+  - 支持原始 Data 输入。
+  - 解码自动忽略空格、制表符和换行。
+  - 自动识别 URL Safe 字符。
+  - 支持可选 Padding。
+  - 支持 0、64、76 字符换行宽度。
+  - 长度模 4 等于 1 时返回明确错误。
+  - 长度模 4 等于 2 或 3 时安全补齐 Padding。
+  - UTF-8 结果显示文本。
+  - 非 UTF-8 结果显示 Hex Preview。
+  - 图片数据通过 magic bytes 标记图片预览。
+  - Data URI 解析 MIME Type。
+  - metadata 显示“Base64 是编码，不是加密”。
+- 实现 JSON 转换：
+  - `json.validate`
+  - `json.prettyPrint`
+  - `json.minify`
+  - `json.sortKeys`
+  - `json.escape`
+  - `json.unescape`
+- 实现 URL 转换：
+  - `url.encode`
+  - `url.decode`
+  - `url.inspectQuery`
+  - `url.sortQuery`
+  - `url.toMarkdownLink`
+  - `url.extractDomain`
+- 实现 JWT 转换：
+  - `jwt.decodeHeader`
+  - `jwt.decodePayload`
+  - `jwt.inspectClaims`
+  - metadata 和 preview 提示“已解析，但未验证签名”。
+- 实现 Hash 转换：
+  - `hash.sha256`
+  - `hash.sha512`
+  - `hash.sha1`
+  - `hash.md5`
+  - `hash.hmacSHA256`
+- 实现 Date 转换：
+  - `date.unixSecondsToISO8601`
+  - `date.unixMillisecondsToISO8601`
+  - `date.iso8601ToUnixSeconds`
+  - `date.iso8601ToUnixMilliseconds`
+  - `date.currentUnixTimestamp`
+  - `date.currentISO8601`
+- 实现 Text 转换：
+  - `text.trim`
+  - `text.removeBlankLines`
+  - `text.uniqueLines`
+  - `text.sortLines`
+  - `text.reverseLines`
+  - `text.joinLines`
+  - `text.splitLines`
+  - `text.camelCase`
+  - `text.pascalCase`
+  - `text.snakeCase`
+  - `text.kebabCase`
+  - `text.screamingSnakeCase`
+  - `text.unicodeEscape`
+  - `text.unicodeUnescape`
+  - `text.hexEncode`
+  - `text.hexDecode`
+  - `text.jsonEscape`
+  - `text.jsonUnescape`
+  - `text.htmlEncode`
+  - `text.htmlDecode`
+  - `text.normalizeLF`
+  - `text.normalizeCRLF`
+- 新增 Phase 5 测试：
+  - Base64 标准、URL Safe、缺失 Padding、空输入、Unicode、二进制、非法输入和 Data URI 测试。
+  - JSON 转换测试。
+  - URL 转换测试。
+  - JWT 解析和未验证签名提示测试。
+  - Hash 转换测试。
+  - 时间戳转换测试。
+  - Text 转换测试。
+  - Smart Actions 测试。
+  - TransformPipeline 顺序执行和错误传播测试。
+  - TransformEngine 超时测试。
+- 实现 Phase 6 自动粘贴系统边界：
+  - `PasteAutomationPreferenceProviding` 控制用户是否启用自动粘贴。
+  - `AccessibilityPermissionClient` 隔离辅助功能权限检测和请求。
+  - `ApplicationFocusClient` 隔离前台应用读取和焦点恢复。
+  - `KeyboardEventClient` 隔离 Command+V CGEvent 发送。
+  - `PasteTargetApplication` 作为跨并发边界的可测试目标应用模型。
+- 实现 Phase 6 `PasteEngine` 自动粘贴流程：
+  - `copyOnly` 只写回剪贴板，不请求辅助功能权限。
+  - `pasteOriginal` 写回原始表示后按需自动粘贴。
+  - `pastePlainText` 写回 UTF-8 纯文本后按需自动粘贴。
+  - `pasteSpecificRepresentation` 写回指定 representation 后按需自动粘贴。
+  - 未启用自动粘贴时降级为 copyOnly 行为。
+  - 辅助功能权限被拒绝时降级为 copyOnly 行为。
+  - 找不到或无法恢复目标应用时降级为 copyOnly 行为。
+  - 自动粘贴前保留剪贴板内容，并记录 `ClipboardWriteGuard` 内部写入标记。
+- 接入 Quick Panel Phase 6 键盘行为：
+  - Return 执行原始格式自动粘贴。
+  - Shift+Return 执行纯文本自动粘贴。
+  - Command+Return 始终只写回原始格式剪贴板。
+  - 自动粘贴前关闭 Quick Panel，并将原前台应用交给 `PasteEngine` 恢复焦点。
+- 设置页新增“自动粘贴”开关：
+  - 默认关闭。
+  - 只有用户开启后，自动粘贴流程才会请求辅助功能权限。
+- 新增 Phase 6 测试：
+  - 自动粘贴关闭时降级 copyOnly 且不请求权限。
+  - 自动粘贴开启后请求权限、恢复目标应用并发送 Command+V。
+  - 辅助功能权限拒绝时降级 copyOnly。
+  - 未显式传入目标应用时使用当前前台应用。
+  - `pasteSpecificRepresentation` 只写回指定 representation。
+- 实现 Phase 7 Clipboard Stack：
+  - 新增 `ClipboardStackStore` 协议。
+  - 新增内存和 GRDB Stack Store。
+  - 新增 `ClipboardStackService`，负责创建栈、追加、移除和推进下一条。
+  - 新增 `SequentialPasteService`，基于 Stack 当前 index 调用 `PasteEngine`。
+  - 顺序粘贴会推进并持久化 `currentIndex`，状态可恢复。
+- 实现 Phase 7 Diff：
+  - 新增 `DiffService` 协议。
+  - 新增 `LineDiffService`，使用行级 LCS 返回结构化增删不变行。
+  - 新增 `DiffLine` 和 `DiffResult`。
+- 实现 Phase 7 Pipeline 管理和预览：
+  - 新增 `TransformPipelineStore` 协议。
+  - 新增内存和 GRDB Pipeline Store。
+  - 新增 `PipelinePreviewService`，从剪贴板记录构建 `TransformInput` 并执行预览。
+  - Pipeline 预览不修改原始记录、不写剪贴板。
+- 实现 Phase 7 Snippets：
+  - 新增 `ClipboardSnippet` 模型。
+  - 新增 `SnippetStore` 协议。
+  - 新增内存和 GRDB Snippet Store。
+  - 新增 `SnippetLibrary`，支持保存片段并转为 `TransformInput`。
+  - 数据库新增 `v2_create_phase7_schema` 迁移和 `snippets` 表。
+- 接入 Phase 7 SwiftUI 窗口：
+  - 转换预览窗口替换占位视图，支持保存示例流水线、选择历史记录并运行预览。
+  - 差异对比窗口替换占位视图，支持选择两条历史记录并显示行级 Diff。
+  - 剪贴板栈窗口替换占位视图，支持用最近历史创建栈、粘贴下一个、将最新记录保存为片段。
+  - 用户可见文案使用中文。
+- 新增 Phase 7 测试：
+  - GRDB Stack、Pipeline、Snippet 持久化测试。
+  - Sequential Paste 顺序推进和写回测试。
+  - Diff 增删行测试。
+  - Pipeline 预览失败不修改原记录测试。
+  - Snippet 转 TransformInput 测试。
+- 完成 Phase 8 设置窗口：
+  - 通用设置支持开机启动和自动粘贴。
+  - 隐私设置保留敏感内容遮罩开关。
+  - 导入导出设置支持输入口令、导出路径、导入路径、加密导出和解密导入。
+  - 维护设置显示 Sparkle 2 预留接口状态，并支持测量当前库搜索耗时。
+  - 设置页用户可见文案使用中文。
+- 实现 Phase 8 开机启动边界：
+  - 新增 `LaunchAtLoginClient` 协议。
+  - 新增 `SystemLaunchAtLoginClient`，通过 `SMAppService.mainApp` 注册和取消开机启动。
+  - 新增 `InMemoryLaunchAtLoginClient` 便于单元测试。
+- 实现 Phase 8 AES-GCM 加密导入导出：
+  - 新增 `ClipboardArchiveService` 协议。
+  - 新增 `AESGCMClipboardArchiveService`。
+  - 使用 CryptoKit AES-GCM 加密导出包。
+  - 使用 HKDF-SHA256 从用户口令和随机 salt 派生 AES 密钥。
+  - 导出包默认排除 `isSensitive == true`、metadata 标记 secret、metadata 标记 `shouldExport=false` 的记录。
+  - Blob 文件引用不直接塞进主导出包，避免复制外部 Blob 文件正文。
+  - 新增 `ClipboardArchiveFileClient` 和 JSON 文件实现。
+- 验证 Sparkle 2 预留接口：
+  - `UpdateCheckingClient` 增加 `integrationStatus()`。
+  - `SparkleUpdateCheckingClient` 明确报告已预留接口、当前未链接 Sparkle 2 运行时依赖。
+- 实现 Phase 8 性能基线：
+  - 新增 `SearchPerformanceProbe`。
+  - 支持构造 1 万条搜索基线数据并测量搜索耗时。
+  - 新增 1 万条记录搜索性能测试。
+- 完成发布准备脚本：
+  - 新增 `script/release_check.sh`。
+  - 验证 app bundle、Info.plist 和可执行文件。
+  - 输出 codesign 和 Gatekeeper 状态。
+  - 明确本地构建为 ad-hoc 签名，正式分发仍需 Developer ID、Hardened Runtime 和 Notarization。
+- 新增 Phase 8 测试：
+  - AES-GCM 导出排除敏感记录并可解密导入测试。
+  - 错误口令导入失败测试。
+  - 归档 JSON 文件读写测试。
+  - 开机启动 Mock 测试。
+  - Sparkle 2 预留状态测试。
+  - 1 万条记录搜索性能基线测试。
+- 完成 Phase 8 后功能完善：
+  - `BlobStore` 增加读取接口。
+  - 图片采集时将原图写入 Blob Store，并生成 PNG 缩略图 Blob。
+  - `PasteEngine` 支持 Blob 表示写回，并跳过 DevClip 内部缩略图表示。
+  - Quick Panel Action Panel 接入 `TransformEngine.smartActions`。
+  - Action Panel 支持转换预览，Command+Return 可保存派生记录并写回剪贴板。
+  - Quick Panel Command+D 接入 Diff 选择和预览。
+  - 完整历史管理窗口替换占位界面，支持搜索、固定、敏感筛选、详情预览、复制、纯文本粘贴和删除。
+  - 主要窗口接入统一的 DevClip 工作台视觉背景和面板风格。
+  - 生成并接入 DevClip app icon，SwiftPM 资源和本地 app bundle 均包含图标。
+  - 新增 Blob 读取、图片缩略图和 Blob 写回测试。
+
+## 未开始
+
+- 无。
+
+## 架构决定
+
+- 使用 SwiftPM，不创建 Xcode project。
+- 使用 `DevClipCore` 承载业务模型和服务边界，避免 SwiftUI View 直接访问数据库或 NSPasteboard。
+- 所有系统服务通过协议隔离，方便 Mock 和单元测试。
+- Phase 0 占位实现统一抛出 `DevClipError.notImplemented`，不伪装为已完成功能。
+- AppKit Quick Panel 在 Phase 3 实现，AppKit 只负责 `NSPanel` 生命周期、焦点恢复和键盘事件路由。
+- Sparkle 2 只预留 `UpdateCheckingClient`，暂不引入 Sparkle 依赖。
+- KeyboardShortcuts 钉定为 1.9.4。原因：1.17.0 在当前 Command Line Tools 环境下编译 `#Preview` 时缺少 `PreviewsMacros`。
+- Phase 1 的去重放在 Repository 层，以保证无论 snapshot 来自真实 NSPasteboard 还是 Mock，都按相同 content hash 规则合并。
+- Phase 4 已将 `ClipboardSnapshotBuilder` 升级为异步构建，并接入多 Detector 内容分类和敏感检测。
+- Phase 1 不实现 Blob Store、图片缩略图或 GRDB 持久化；图片和大数据落盘属于 Phase 2。
+- WriteGuard 只对已记录的内部写入忽略一次，避免用户手动再次复制相同内容时被长期过滤。
+- 后台监控循环保存错误摘要而不是直接吞掉错误，也不记录剪贴板正文。
+- 从 Phase 2 起，应用内用户可见文字使用中文。内部 ID、bundle 标识、系统符号名和技术字符串保持英文。
+- Phase 2 的 SQLite 仓储先作为独立实现加入；Phase 3 已将生产运行时切换到 GRDB，并保留内存降级路径。
+- FTS 底层能力在 Phase 2 暴露为 `GRDBClipboardRepository.searchFTS(_:)`；Phase 3 已通过 `SearchService` 和查询语法接入。
+- Blob Store 和数据库保持松耦合，SQLite 只保存外部相对路径；删除记录后仓储用剩余引用集合清理孤立 Blob。
+- Phase 3 将生产依赖切换到 GRDB，但保留内存仓储作为启动失败降级路径。
+- `SearchService` 通过 `FTSClipboardRepository` 能力协议使用 FTS，避免把搜索服务绑定到 GRDB 具体类型。
+- 搜索输入先解析为结构化 `SearchQuery`，FTS 查询只接收服务生成的文本片段；用户输入的过滤器不直接拼 SQL。
+- Quick Panel 的 AppKit 边界限定为 `NSPanel` 生命周期、焦点恢复和键盘事件路由；SwiftUI ViewModel 持有搜索、选择和命令状态。
+- Phase 3 的 Return/Shift+Return 曾只执行剪贴板写回和面板关闭；Phase 6 已改为按用户设置执行 CGEvent 自动粘贴。
+- Space 在当前 Quick Panel 按键路由中用于预览切换；包含空格的复杂查询可在后续文本焦点策略中继续细化。
+- Phase 4 将分类和敏感检测放在 `ClipboardSnapshotBuilder`，因为这是 pasteboard snapshot 转模型的唯一入口，能同时服务内存仓储和 GRDB 仓储。
+- 分类器采用多个 `ContentDetector` 小组件，候选结果在 `DefaultContentClassifier` 统一去重排序。
+- 敏感检测 evidence 只保存标签，不保存匹配到的密钥、Token 或剪贴板正文。
+- potential 内容在当前阶段默认持久化但预览和搜索文本遮罩，并设置 10 分钟过期；后续设置页可提供“保留此记录”交互。
+- secret 内容默认不持久化、不进入 FTS，放入 `SensitiveEphemeralStore` 并 60 秒过期；忽略来源应用连短期内存缓存也不保留。
+- FTS 跳过逻辑由 entry metadata 驱动，便于后续导出、保留和策略 UI 复用同一安全决策。
+- Phase 5 的转换动作全部是无状态 struct，通过 `TransformEngine` 注册和调度，便于测试和后续按类别展示。
+- Phase 5 的转换结果只返回 `TransformResult`，不直接写剪贴板、不修改原始记录；用户确认写回仍留给后续 UI 流程。
+- Base64 解码使用结构化校验：空输入返回空 Data，模 4 为 1 直接报错，模 4 为 2/3 自动补齐 Padding。
+- JWT 只解析 Header/Payload/Claims，不验证签名，所有 JWT 结果都带未验证签名提示。
+- Hash 使用 CryptoKit，本地离线执行；HMAC-SHA256 通过 `TransformOptions.values["key"]` 传入 key。
+- Phase 5 只实现 Pipeline 的核心顺序执行以验证 TransformEngine 组合能力；Pipeline 管理、Diff/Stack/Snippets UI 仍按路线图留到 Phase 7。
+- Phase 6 不在启动时或 copyOnly 路径请求辅助功能权限；权限请求只发生在用户开启自动粘贴并触发粘贴动作之后。
+- 自动粘贴失败统一保留剪贴板内容并返回结构化 fallback reason，UI 用中文状态提示，不把失败视为复制失败。
+- CGEvent、辅助功能和应用焦点全部通过协议隔离，单元测试只使用 Mock，不依赖真实系统权限。
+- Quick Panel 负责关闭面板和传递原前台应用快照；`PasteEngine` 负责最终焦点恢复、稳定等待和 Command+V 发送。
+- Phase 6 只实现 pasteOriginal/pastePlainText 自动粘贴，不提前实现顺序粘贴、Stack 或 Diff。
+- Phase 7 将 Stack、Pipeline、Snippet 的持久化拆成独立 Store 协议，不塞进 `ClipboardRepository`，避免剪贴板历史仓储职责膨胀。
+- Phase 7 的生产运行时复用同一个 GRDB `DatabasePool`，Repository、Stack Store、Pipeline Store 和 Snippet Store 共享数据库迁移与事务配置。
+- Sequential Paste 由 `ClipboardStackService` 先推进并保存 `currentIndex`，再由 `SequentialPasteService` 调用 `PasteEngine`，使顺序状态和粘贴写回边界可分别测试。
+- Diff 先实现离线行级 LCS，不依赖外部 diff 工具，也不读取文件系统。
+- Pipeline 预览服务只返回 `TransformResult`，不写回剪贴板、不保存派生记录；用户确认写回仍保留给后续更完整的转换工作台交互。
+- Snippets 作为独立 `ClipboardSnippet` 保存，不伪装成剪贴板历史记录；需要参与转换时显式转为 `TransformInput`。
+- Phase 7 窗口采用 SwiftUI 原生 scene 和 ViewModel，View 不直接访问数据库、NSPasteboard 或 CGEvent。
+- Phase 8 的设置页通过 `SettingsViewModel` 调用依赖容器中的协议服务，View 不直接访问 `SMAppService`、文件系统或仓储。
+- 开机启动只通过 `LaunchAtLoginClient` 封装；单元测试使用内存实现，真实 `SMAppService` 不在自动测试中改写用户登录项。
+- 加密导出使用 AES-GCM，口令派生使用 HKDF-SHA256 和随机 salt；未引入额外 KDF 依赖。
+- 导出策略默认保守：所有敏感记录都不导出，secret 即使未持久化也不会从导出通道泄露。
+- 导出包不直接包含 Blob 文件正文；当前 Phase 8 导出侧重文本、小型 inline representation 和文件引用元数据。
+- Sparkle 2 只验证更新检查接口和状态，不引入 Sparkle 依赖；正式发布接入时再处理 Sparkle framework、签名和 appcast。
+- 性能测试以 1 万条记录搜索基线覆盖回归；P95、空闲 CPU 和内存目标仍需要真实使用场景下的长期采样。
+- 发布准备脚本只验证本地 bundle 结构和签名/Gatekeeper 状态；没有 Developer ID 证书时不会伪装为可 notarize 发布包。
+- 图片缩略图作为 DevClip 内部 pasteboard type 保存为独立 Blob representation，原始格式写回时会跳过该内部表示。
+- Quick Panel 转换动作保存为派生历史记录后再通过 `PasteEngine` 写回剪贴板，避免 View 直接访问 `NSPasteboard`。
+- 视觉优化集中在 SwiftUI View 和 `DevClipTheme`，不改变核心服务边界。
+- App icon 通过生成的 PNG 转换为 `.icns`，`script/build_and_run.sh` 手工 bundle 时会复制到 `Contents/Resources` 并写入 `CFBundleIconFile`。
+
+## 构建和测试
+
+已运行：
+
+- `xcodebuild -version`：通过，版本为 Xcode 26.5，Build version 17F42。
+- `xcode-select -p`：通过，当前路径为 `/Applications/Xcode.app/Contents/Developer`。
+- `swift --version`：通过，Apple Swift version 6.3.2。
+- `swift build`：通过。
+- `swift test`：通过，61 个测试全部通过。
+- `xcodebuild -runFirstLaunch`：通过，首次启动组件安装成功。
+- `xcodebuild -scheme DevClip -destination 'platform=macOS' build`：通过。
+- `./script/build_and_run.sh --verify`：通过，已生成并启动 SwiftPM GUI app bundle；Info.plist 已写入 `CFBundleIconFile=AppIcon`，bundle 包含 `AppIcon.icns`。
+- `./script/release_check.sh`：通过，bundle 结构有效；当前为 ad-hoc 签名，Gatekeeper 未通过属于本地未正式签名构建的预期状态。
+
+历史环境修复：
+
+- 初始环境只有 Command Line Tools，导致 `xcodebuild`、`XCTest` 和 `Testing` 不可用。
+- 安装 Xcode 后曾缺少首次启动组件，按 Xcode 提示运行 `xcodebuild -runFirstLaunch` 后恢复。
+
+## 新增文件
+
+- `.codex/environments/environment.toml`
+- `.gitignore`
+- `Package.resolved`
+- `Package.swift`
+- `Sources/DevClipCore/Repository/GRDBClipboardRepository.swift`
+- `Sources/DevClip/Support/AppRuntime.swift`
+- `Sources/DevClip/App/AppDelegate.swift`
+- `Sources/DevClip/App/DevClipApp.swift`
+- `Sources/DevClip/Support/AppDependencyFactory.swift`
+- `Sources/DevClip/Support/ClipboardKindPresentation.swift`
+- `Sources/DevClip/Support/DevClipTheme.swift`
+- `Sources/DevClip/Support/HistoryViewModel.swift`
+- `Sources/DevClip/Support/KeyboardShortcutBootstrap.swift`
+- `Sources/DevClip/Support/QuickPanelController.swift`
+- `Sources/DevClip/Support/QuickPanelViewModel.swift`
+- `Sources/DevClip/Support/SettingsViewModel.swift`
+- `Sources/DevClip/Support/WindowID.swift`
+- `Sources/DevClip/Views/HistoryRootView.swift`
+- `Sources/DevClip/Views/PlaceholderWindowView.swift`
+- `Sources/DevClip/Views/ClipboardStackRootView.swift`
+- `Sources/DevClip/Views/DiffRootView.swift`
+- `Sources/DevClip/Views/QuickPanelView.swift`
+- `Sources/DevClip/Views/SettingsRootView.swift`
+- `Sources/DevClip/Views/TransformPreviewRootView.swift`
+- `Sources/DevClipCore/BlobStore/BlobStore.swift`
+- `Sources/DevClipCore/BlobStore/ImageThumbnailGenerator.swift`
+- `Sources/DevClipCore/Classification/ContentClassifier.swift`
+- `Sources/DevClipCore/Database/DatabaseBootstrap.swift`
+- `Sources/DevClipCore/Diff/DiffService.swift`
+- `Sources/DevClipCore/Export/EncryptedClipboardArchiveService.swift`
+- `Sources/DevClipCore/Models/ClipboardContentKind.swift`
+- `Sources/DevClipCore/Models/ClipboardEntry.swift`
+- `Sources/DevClipCore/Models/ClipboardOrganizationModels.swift`
+- `Sources/DevClipCore/Models/ClipboardRepresentation.swift`
+- `Sources/DevClipCore/Models/SensitiveClassification.swift`
+- `Sources/DevClipCore/Models/TransformModels.swift`
+- `Sources/DevClipCore/Paste/PasteEngine.swift`
+- `Sources/DevClipCore/Paste/PasteAutomationClients.swift`
+- `Sources/DevClipCore/Pasteboard/ClipboardContentHasher.swift`
+- `Sources/DevClipCore/Pasteboard/ClipboardMonitor.swift`
+- `Sources/DevClipCore/Pasteboard/ClipboardSnapshotBuilder.swift`
+- `Sources/DevClipCore/Pasteboard/ClipboardWriteGuard.swift`
+- `Sources/DevClipCore/Pasteboard/PasteboardClient.swift`
+- `Sources/DevClipCore/Pasteboard/PasteboardInternalTypes.swift`
+- `Sources/DevClipCore/Pasteboard/SystemPasteboardClient.swift`
+- `Sources/DevClipCore/Performance/SearchPerformanceProbe.swift`
+- `Sources/DevClipCore/Pipeline/TransformPipelineStore.swift`
+- `Sources/DevClipCore/Repository/ClipboardRepository.swift`
+- `Sources/DevClipCore/Search/SearchQuery.swift`
+- `Sources/DevClipCore/Search/SearchQueryParser.swift`
+- `Sources/DevClipCore/Search/SearchService.swift`
+- `Sources/DevClipCore/Security/SensitiveEphemeralStore.swift`
+- `Sources/DevClipCore/Security/SensitiveContentDetector.swift`
+- `Sources/DevClipCore/Settings/LaunchAtLoginClient.swift`
+- `Sources/DevClipCore/Snippets/SnippetStore.swift`
+- `Sources/DevClipCore/Stack/ClipboardStackStore.swift`
+- `Sources/DevClipCore/Support/DependencyContainer.swift`
+- `Sources/DevClipCore/Support/DevClipError.swift`
+- `Sources/DevClipCore/Transforms/TransformAction.swift`
+- `Sources/DevClipCore/Transforms/Base64TransformAction.swift`
+- `Sources/DevClipCore/Transforms/DateTransformAction.swift`
+- `Sources/DevClipCore/Transforms/TransformEngine.swift`
+- `Sources/DevClipCore/Transforms/HashTransformAction.swift`
+- `Sources/DevClipCore/Transforms/JSONTransformAction.swift`
+- `Sources/DevClipCore/Transforms/JWTTransformAction.swift`
+- `Sources/DevClipCore/Transforms/TextTransformAction.swift`
+- `Sources/DevClipCore/Transforms/TransformSupport.swift`
+- `Sources/DevClipCore/Transforms/URLTransformAction.swift`
+- `Sources/DevClipCore/Updates/UpdateCheckingClient.swift`
+- `Sources/DevClip/Resources/AppIcon.icns`
+- `Sources/DevClip/Resources/AppIcon.png`
+- `Sources/DevClip/Resources/AppIcon.iconset/`
+- `Tests/DevClipCoreTests/Phase0SmokeTests.swift`
+- `Tests/DevClipCoreTests/Phase1ClipboardTests.swift`
+- `Tests/DevClipCoreTests/Phase2PersistenceTests.swift`
+- `Tests/DevClipCoreTests/Phase3QuickPanelSearchTests.swift`
+- `Tests/DevClipCoreTests/Phase4ClassificationSecurityTests.swift`
+- `Tests/DevClipCoreTests/Phase5TransformTests.swift`
+- `Tests/DevClipCoreTests/Phase6PasteAutomationTests.swift`
+- `Tests/DevClipCoreTests/Phase7StackDiffPipelineTests.swift`
+- `Tests/DevClipCoreTests/Phase8ExportSettingsPerformanceTests.swift`
+- `docs/ARCHITECTURE.md`
+- `docs/IMPLEMENTATION_STATUS.md`
+- `docs/PRODUCT_SPEC.md`
+- `docs/ROADMAP.md`
+- `docs/SECURITY.md`
+- `script/build_and_run.sh`
+- `script/release_check.sh`
