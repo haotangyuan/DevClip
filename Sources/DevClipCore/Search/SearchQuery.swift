@@ -4,7 +4,6 @@ public enum SearchFilter: Equatable, Sendable {
     case type(ClipboardContentKind)
     case app(String)
     case pinned(Bool)
-    case sensitive(Bool)
     case before(Date)
     case after(Date)
     case tag(String)

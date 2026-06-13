@@ -7,7 +7,6 @@ final class HistoryViewModel: ObservableObject {
     enum Scope: String, CaseIterable, Identifiable {
         case all
         case pinned
-        case sensitive
 
         var id: String { rawValue }
 
@@ -17,8 +16,6 @@ final class HistoryViewModel: ObservableObject {
                 "历史"
             case .pinned:
                 "固定"
-            case .sensitive:
-                "敏感"
             }
         }
 
@@ -28,8 +25,6 @@ final class HistoryViewModel: ObservableObject {
                 "clock"
             case .pinned:
                 "pin"
-            case .sensitive:
-                "lock.shield"
             }
         }
     }
@@ -71,8 +66,7 @@ final class HistoryViewModel: ObservableObject {
     var counts: [Scope: Int] {
         [
             .all: allEntries.count,
-            .pinned: allEntries.filter(\.isPinned).count,
-            .sensitive: allEntries.filter(\.isSensitive).count
+            .pinned: allEntries.filter(\.isPinned).count
         ]
     }
 
@@ -227,8 +221,6 @@ final class HistoryViewModel: ObservableObject {
             values
         case .pinned:
             values.filter(\.isPinned)
-        case .sensitive:
-            values.filter(\.isSensitive)
         }
     }
 }

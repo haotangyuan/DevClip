@@ -22,6 +22,11 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - 稳定 `ClipboardWriteGuard` 测试：
   - 生产默认仍持久化内部写入标记。
   - 单元测试可关闭 UserDefaults 持久化，避免跨测试运行污染。
+- 按本地个人使用场景移除敏感内容遮罩功能：
+  - 新采集内容不再检测 API Key、Token、私钥或验证码并自动遮罩。
+  - 不再将 secret 内容分流到内存，也不再因为敏感分类跳过持久化或全文索引。
+  - 历史窗口移除“敏感”筛选和徽标，设置页移除遮罩开关。
+  - 加密导出不再按敏感标记跳过记录，仅保留 `shouldExport=false` 的手动排除能力。
 
 ## 已完成
 
@@ -45,14 +50,12 @@ Phase 8：设置、导入导出、性能优化和发布准备。
   - `TransformPipeline`
   - `TransformExecution`
   - `ClipboardStack`
-  - `SensitiveClassification`
 - 创建协议和明确占位实现：
   - `PasteboardClient`
   - `ClipboardMonitor`
   - `ClipboardWriteGuard`
   - `ClipboardRepository`
   - `ContentClassifier`
-  - `SensitiveContentDetecting`
   - `TransformAction`
   - `TransformEngine`
   - `SearchService`
@@ -145,7 +148,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - 实现 `SearchQueryParser`：
   - 支持普通关键词。
   - 支持精确短语。
-  - 支持 `type:`、`app:`、`is:pinned`、`is:sensitive`、`before:`、`after:` 和 `#tag`。
+  - 支持 `type:`、`app:`、`is:pinned`、`before:`、`after:` 和 `#tag`。
   - 未识别过滤器退回普通关键词。
 - 实现 `SQLiteSearchService`：
   - 长查询优先使用 FTS5。
@@ -226,38 +229,12 @@ Phase 8：设置、导入导出、性能优化和发布准备。
   - `image`
   - `fileList`
   - `binary`
-- 实现 `DefaultSensitiveContentDetector`：
-  - 检测 PEM Private Key。
-  - 检测 Bearer Token。
-  - 检测 JWT。
-  - 检测常见 API Key/Secret/Token/Password 赋值。
-  - 检测 AWS Access Key。
-  - 检测 GitHub Token。
-  - 检测数据库连接串用户名密码。
-  - 检测 `.env` 密钥。
-  - 检测高熵长字符串。
-  - 检测验证码。
-  - 检测密码管理器和钥匙串来源应用。
-- 实现敏感内容策略：
-  - `none` 正常保存。
-  - `potential` 默认遮罩，设置 10 分钟过期，允许持久化。
-  - `secret` 默认不持久化、不进入 FTS，只保留在内存并设置 60 秒过期。
-  - 忽略来源应用默认不持久化，也不进入短期内存缓存。
-  - 敏感元数据只记录证据标签，不记录完整剪贴板正文。
-- 实现 `IgnoredSourceApplicationPolicy`：
-  - 默认包含 Keychain Access、Passwords、1Password、Bitwarden、KeePassXC、LastPass。
-  - 支持通过 bundle identifier 集合和片段集合扩展忽略规则。
-- 实现 `SensitiveEphemeralStore`：
-  - actor 隔离。
-  - 保存 secret 记录和表示到内存。
-  - 默认 60 秒清理。
-- 将 Phase 4 接入采集链路：
+- 将 Phase 4 内容分类接入采集链路：
   - `ClipboardSnapshotBuilder` 改为异步构建。
-  - 每个 pasteboard item 先分类，再做敏感检测。
+  - 每个 pasteboard item 先进行类型分类。
   - `ClipboardEntry.detectedKind` 使用分类结果。
-  - `ClipboardEntry.metadata` 保存候选类型、证据标签、敏感等级和索引策略。
-  - potential/secret 预览和 searchable text 默认遮罩。
-  - secret 从持久化 entries 中分离到 protected entries。
+  - `ClipboardEntry.metadata` 保存候选类型、分类证据和索引策略。
+  - 本地个人版不做敏感内容遮罩，复制内容按原文持久化、预览和索引。
 - 扩展 Repository 过期清理：
   - `ClipboardRepository.deleteExpiredEntries(now:)`。
   - `InMemoryClipboardRepository` 清理过期 entry。
@@ -269,11 +246,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
   - 内容分类覆盖测试。
   - 图片和文件列表分类测试。
   - Detector 抛错不中断测试。
-  - secret token 检测测试。
-  - 验证码 potential 策略测试。
-  - 密码管理器来源忽略测试。
-  - secret 只进内存不持久化测试。
-  - potential 遮罩和过期测试。
+  - token 样式内容完整保存且不遮罩测试。
   - Repository 过期清理测试。
   - `shouldIndex=false` 不进入 FTS 测试。
 - 实现 Phase 5 `TransformEngine`：
@@ -440,7 +413,6 @@ Phase 8：设置、导入导出、性能优化和发布准备。
   - Snippet 转 TransformInput 测试。
 - 完成 Phase 8 设置窗口：
   - 通用设置支持开机启动和自动粘贴。
-  - 隐私设置保留敏感内容遮罩开关。
   - 导入导出设置支持输入口令、导出路径、导入路径、加密导出和解密导入。
   - 维护设置显示 Sparkle 2 预留接口状态，并支持测量当前库搜索耗时。
   - 设置页用户可见文案使用中文。
@@ -453,7 +425,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
   - 新增 `AESGCMClipboardArchiveService`。
   - 使用 CryptoKit AES-GCM 加密导出包。
   - 使用 HKDF-SHA256 从用户口令和随机 salt 派生 AES 密钥。
-  - 导出包默认排除 `isSensitive == true`、metadata 标记 secret、metadata 标记 `shouldExport=false` 的记录。
+  - 导出包默认包含所有普通历史记录，仅排除 metadata 标记 `shouldExport=false` 的记录。
   - Blob 文件引用不直接塞进主导出包，避免复制外部 Blob 文件正文。
   - 新增 `ClipboardArchiveFileClient` 和 JSON 文件实现。
 - 验证 Sparkle 2 预留接口：
@@ -469,7 +441,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
   - 输出 codesign 和 Gatekeeper 状态。
   - 明确本地构建为 ad-hoc 签名，正式分发仍需 Developer ID、Hardened Runtime 和 Notarization。
 - 新增 Phase 8 测试：
-  - AES-GCM 导出排除敏感记录并可解密导入测试。
+  - AES-GCM 导出包含 token 样式记录并可解密导入测试。
   - 错误口令导入失败测试。
   - 归档 JSON 文件读写测试。
   - 开机启动 Mock 测试。
@@ -482,7 +454,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
   - Quick Panel Action Panel 接入 `TransformEngine.smartActions`。
   - Action Panel 支持转换预览，Command+Return 可保存派生记录并写回剪贴板。
   - Quick Panel Command+D 接入 Diff 选择和预览。
-  - 完整历史管理窗口替换占位界面，支持搜索、固定、敏感筛选、详情预览、复制、纯文本粘贴和删除。
+  - 完整历史管理窗口替换占位界面，支持搜索、固定、详情预览、复制、纯文本粘贴和删除。
   - 主要窗口接入统一的 DevClip 工作台视觉背景和面板风格。
   - 生成并接入 DevClip app icon，SwiftPM 资源和本地 app bundle 均包含图标。
   - 新增 Blob 读取、图片缩略图和 Blob 写回测试。
@@ -501,7 +473,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - Sparkle 2 只预留 `UpdateCheckingClient`，暂不引入 Sparkle 依赖。
 - KeyboardShortcuts 钉定为 1.9.4。原因：1.17.0 在当前 Command Line Tools 环境下编译 `#Preview` 时缺少 `PreviewsMacros`。
 - Phase 1 的去重放在 Repository 层，以保证无论 snapshot 来自真实 NSPasteboard 还是 Mock，都按相同 content hash 规则合并。
-- Phase 4 已将 `ClipboardSnapshotBuilder` 升级为异步构建，并接入多 Detector 内容分类和敏感检测。
+- Phase 4 已将 `ClipboardSnapshotBuilder` 升级为异步构建，并接入多 Detector 内容分类。
 - Phase 1 不实现 Blob Store、图片缩略图或 GRDB 持久化；图片和大数据落盘属于 Phase 2。
 - WriteGuard 只对已记录的内部写入忽略一次，避免用户手动再次复制相同内容时被长期过滤。
 - 后台监控循环保存错误摘要而不是直接吞掉错误，也不记录剪贴板正文。
@@ -515,12 +487,10 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - Quick Panel 的 AppKit 边界限定为 `NSPanel` 生命周期、焦点恢复和键盘事件路由；SwiftUI ViewModel 持有搜索、选择和命令状态。
 - Phase 3 的 Return/Shift+Return 曾只执行剪贴板写回和面板关闭；Phase 6 已改为按用户设置执行 CGEvent 自动粘贴。
 - Space 在当前 Quick Panel 按键路由中用于预览切换；包含空格的复杂查询可在后续文本焦点策略中继续细化。
-- Phase 4 将分类和敏感检测放在 `ClipboardSnapshotBuilder`，因为这是 pasteboard snapshot 转模型的唯一入口，能同时服务内存仓储和 GRDB 仓储。
+- Phase 4 将内容分类放在 `ClipboardSnapshotBuilder`，因为这是 pasteboard snapshot 转模型的唯一入口，能同时服务内存仓储和 GRDB 仓储。
 - 分类器采用多个 `ContentDetector` 小组件，候选结果在 `DefaultContentClassifier` 统一去重排序。
-- 敏感检测 evidence 只保存标签，不保存匹配到的密钥、Token 或剪贴板正文。
-- potential 内容在当前阶段默认持久化但预览和搜索文本遮罩，并设置 10 分钟过期；后续设置页可提供“保留此记录”交互。
-- secret 内容默认不持久化、不进入 FTS，放入 `SensitiveEphemeralStore` 并 60 秒过期；忽略来源应用连短期内存缓存也不保留。
-- FTS 跳过逻辑由 entry metadata 驱动，便于后续导出、保留和策略 UI 复用同一安全决策。
+- 敏感内容遮罩功能已移除；本地个人版按原文保存、预览、索引和导出复制内容。
+- FTS 跳过逻辑仍支持 `metadata["shouldIndex"] == "false"`，用于未来手动排除索引场景。
 - Phase 5 的转换动作全部是无状态 struct，通过 `TransformEngine` 注册和调度，便于测试和后续按类别展示。
 - Phase 5 的转换结果只返回 `TransformResult`，不直接写剪贴板、不修改原始记录；用户确认写回仍留给后续 UI 流程。
 - Base64 解码使用结构化校验：空输入返回空 Data，模 4 为 1 直接报错，模 4 为 2/3 自动补齐 Padding。
@@ -542,7 +512,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - Phase 8 的设置页通过 `SettingsViewModel` 调用依赖容器中的协议服务，View 不直接访问 `SMAppService`、文件系统或仓储。
 - 开机启动只通过 `LaunchAtLoginClient` 封装；单元测试使用内存实现，真实 `SMAppService` 不在自动测试中改写用户登录项。
 - 加密导出使用 AES-GCM，口令派生使用 HKDF-SHA256 和随机 salt；未引入额外 KDF 依赖。
-- 导出策略默认保守：所有敏感记录都不导出，secret 即使未持久化也不会从导出通道泄露。
+- 导出策略默认完整：不按敏感标记跳过记录，只跳过 `shouldExport=false` 的手动排除记录。
 - 导出包不直接包含 Blob 文件正文；当前 Phase 8 导出侧重文本、小型 inline representation 和文件引用元数据。
 - Sparkle 2 只验证更新检查接口和状态，不引入 Sparkle 依赖；正式发布接入时再处理 Sparkle framework、签名和 appcast。
 - 性能测试以 1 万条记录搜索基线覆盖回归；P95、空闲 CPU 和内存目标仍需要真实使用场景下的长期采样。
@@ -560,7 +530,7 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - `xcode-select -p`：通过，当前路径为 `/Applications/Xcode.app/Contents/Developer`。
 - `swift --version`：通过，Apple Swift version 6.3.2。
 - `swift build`：通过。
-- `swift test`：通过，63 个测试全部通过。
+- `swift test`：通过，59 个测试全部通过。
 - `xcodebuild -runFirstLaunch`：通过，首次启动组件安装成功。
 - `xcodebuild -scheme DevClip -destination 'platform=macOS' build`：通过。
 - `./script/build_and_run.sh --verify`：通过，已生成并启动 SwiftPM GUI app bundle；Info.plist 已写入 `CFBundleIconFile=AppIcon`，bundle 包含 `AppIcon.icns`。
@@ -612,7 +582,6 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - `Sources/DevClipCore/Models/ClipboardEntry.swift`
 - `Sources/DevClipCore/Models/ClipboardOrganizationModels.swift`
 - `Sources/DevClipCore/Models/ClipboardRepresentation.swift`
-- `Sources/DevClipCore/Models/SensitiveClassification.swift`
 - `Sources/DevClipCore/Models/TransformModels.swift`
 - `Sources/DevClipCore/Paste/PasteEngine.swift`
 - `Sources/DevClipCore/Paste/PasteAutomationClients.swift`
@@ -629,8 +598,6 @@ Phase 8：设置、导入导出、性能优化和发布准备。
 - `Sources/DevClipCore/Search/SearchQuery.swift`
 - `Sources/DevClipCore/Search/SearchQueryParser.swift`
 - `Sources/DevClipCore/Search/SearchService.swift`
-- `Sources/DevClipCore/Security/SensitiveEphemeralStore.swift`
-- `Sources/DevClipCore/Security/SensitiveContentDetector.swift`
 - `Sources/DevClipCore/Settings/LaunchAtLoginClient.swift`
 - `Sources/DevClipCore/Snippets/SnippetStore.swift`
 - `Sources/DevClipCore/Stack/ClipboardStackStore.swift`

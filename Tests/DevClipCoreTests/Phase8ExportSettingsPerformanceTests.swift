@@ -5,7 +5,7 @@ import Testing
 @Suite("Phase 8 Export Settings Performance Tests")
 struct Phase8ExportSettingsPerformanceTests {
     @Test
-    func encryptedExportExcludesSensitiveEntriesAndImportsRoundTrip() async throws {
+    func encryptedExportIncludesAllEntriesAndImportsRoundTrip() async throws {
         let sourceRepository = InMemoryClipboardRepository()
         let targetRepository = InMemoryClipboardRepository()
         let sourceService = AESGCMClipboardArchiveService(
@@ -23,11 +23,9 @@ struct Phase8ExportSettingsPerformanceTests {
         )
         let secretEntry = makePhase8Entry(
             groupID: group.id,
-            title: "敏感记录",
+            title: "令牌记录",
             text: "SECRET_TOKEN=abc123456789",
-            hash: "sha256:phase8-secret",
-            isSensitive: true,
-            metadata: ClipboardMetadata(values: ["sensitiveClassification": SensitiveClassification.secret.rawValue])
+            hash: "sha256:phase8-secret"
         )
 
         try await sourceRepository.save(
@@ -43,8 +41,8 @@ struct Phase8ExportSettingsPerformanceTests {
         let encodedArchive = try JSONEncoder().encode(exportResult.archive)
         let encodedArchiveText = String(data: encodedArchive, encoding: .utf8) ?? ""
 
-        #expect(exportResult.summary.exportedEntryCount == 1)
-        #expect(exportResult.summary.skippedSensitiveCount == 1)
+        #expect(exportResult.summary.exportedEntryCount == 2)
+        #expect(exportResult.summary.skippedEntryCount == 0)
         #expect(!encodedArchiveText.contains("SECRET_TOKEN"))
 
         let importSummary = try await targetService.importEncrypted(
@@ -53,9 +51,10 @@ struct Phase8ExportSettingsPerformanceTests {
         )
         let importedEntries = try await targetRepository.entries()
 
-        #expect(importSummary.importedEntryCount == 1)
-        #expect(importedEntries.map(\.title) == ["安全记录"])
+        #expect(importSummary.importedEntryCount == 2)
+        #expect(importedEntries.map(\.title).sorted() == ["令牌记录", "安全记录"])
         #expect(try await targetRepository.representations(entryID: safeEntry.id).first?.inlineData == Data("safe payload".utf8))
+        #expect(try await targetRepository.representations(entryID: secretEntry.id).first?.inlineData == Data("SECRET_TOKEN=abc123456789".utf8))
     }
 
     @Test
@@ -157,7 +156,6 @@ private func makePhase8Entry(
     title: String,
     text: String,
     hash: String,
-    isSensitive: Bool = false,
     metadata: ClipboardMetadata = ClipboardMetadata()
 ) -> ClipboardEntry {
     ClipboardEntry(
@@ -171,7 +169,6 @@ private func makePhase8Entry(
         previewText: text,
         createdAt: Date(timeIntervalSince1970: 80),
         updatedAt: Date(timeIntervalSince1970: 80),
-        isSensitive: isSensitive,
         byteCount: Int64(text.utf8.count),
         metadata: metadata
     )

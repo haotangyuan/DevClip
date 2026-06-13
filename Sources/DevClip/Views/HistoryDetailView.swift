@@ -74,10 +74,6 @@ struct HistoryDetailView: View {
 
     @ViewBuilder
     private func headerBadges(_ entry: ClipboardEntry) -> some View {
-        if entry.isSensitive {
-            Label("敏感", systemImage: "lock.fill")
-                .devClipStatusBadge(color: .orange)
-        }
         if entry.isPinned {
             Label("已固定", systemImage: "pin.fill")
                 .devClipStatusBadge(color: Color.accentColor)

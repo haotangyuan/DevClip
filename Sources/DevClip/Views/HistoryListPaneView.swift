@@ -98,7 +98,7 @@ private struct HistoryEntryRow: View {
         } else {
             Image(systemName: entry.isPinned ? "pin.fill" : ClipboardKindPresentation.iconName(entry.detectedKind))
                 .font(.system(size: 14))
-                .foregroundStyle(entry.isSensitive ? .orange : .secondary)
+                .foregroundStyle(.secondary)
                 .frame(width: 36, height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)

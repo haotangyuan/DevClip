@@ -3,11 +3,11 @@ import Foundation
 
 public struct ClipboardArchiveExportSummary: Equatable, Sendable {
     public var exportedEntryCount: Int
-    public var skippedSensitiveCount: Int
+    public var skippedEntryCount: Int
 
-    public init(exportedEntryCount: Int, skippedSensitiveCount: Int) {
+    public init(exportedEntryCount: Int, skippedEntryCount: Int) {
         self.exportedEntryCount = exportedEntryCount
-        self.skippedSensitiveCount = skippedSensitiveCount
+        self.skippedEntryCount = skippedEntryCount
     }
 }
 
@@ -144,7 +144,7 @@ public actor AESGCMClipboardArchiveService: ClipboardArchiveService {
         )
         let summary = ClipboardArchiveExportSummary(
             exportedEntryCount: exportableEntries.count,
-            skippedSensitiveCount: allEntries.count - exportableEntries.count
+            skippedEntryCount: allEntries.count - exportableEntries.count
         )
 
         return (archive, summary)
@@ -200,14 +200,6 @@ public actor AESGCMClipboardArchiveService: ClipboardArchiveService {
     }
 
     private static func isExportable(_ entry: ClipboardEntry) -> Bool {
-        if entry.isSensitive {
-            return false
-        }
-
-        if entry.metadata.values["sensitiveClassification"] == SensitiveClassification.secret.rawValue {
-            return false
-        }
-
         if entry.metadata.values["shouldExport"] == "false" {
             return false
         }
