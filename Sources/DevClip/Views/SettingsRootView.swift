@@ -5,8 +5,6 @@ struct SettingsRootView: View {
     @StateObject private var viewModel: SettingsViewModel
     @AppStorage(UserDefaultsPasteAutomationPreferences.automaticPasteEnabledKey)
     private var isAutomaticPasteEnabled = false
-    @AppStorage("privacy.maskSensitiveContent")
-    private var masksSensitiveContent = true
 
     init(dependencies: DependencyContainer) {
         _viewModel = StateObject(wrappedValue: SettingsViewModel(dependencies: dependencies))
@@ -17,11 +15,6 @@ struct SettingsRootView: View {
             generalTab
                 .tabItem {
                     Label("通用", systemImage: "gear")
-                }
-
-            privacyTab
-                .tabItem {
-                    Label("隐私", systemImage: "lock.shield")
                 }
 
             archiveTab
@@ -70,26 +63,6 @@ struct SettingsRootView: View {
                 ))
 
                 Toggle("选择后自动粘贴到前台应用", isOn: $isAutomaticPasteEnabled)
-            }
-        }
-    }
-
-    // MARK: - Privacy Tab
-
-    private var privacyTab: some View {
-        Form {
-            Section("敏感内容") {
-                Toggle("遮罩敏感内容", isOn: $masksSensitiveContent)
-
-                Text("启用后，检测到可能包含密码、密钥等敏感信息的剪贴板内容将自动遮罩显示。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("导出安全") {
-                Text("敏感记录默认不导出，导出文件使用 AES-GCM 加密保护。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
             }
         }
     }

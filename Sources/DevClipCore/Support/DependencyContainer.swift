@@ -7,9 +7,7 @@ public struct DependencyContainer: Sendable {
     public var repository: any ClipboardRepository
     public var writeGuard: ClipboardWriteGuard
     public var clipboardMonitor: ClipboardMonitor
-    public var ephemeralSensitiveStore: SensitiveEphemeralStore
     public var contentClassifier: any ContentClassifier
-    public var sensitiveDetector: any SensitiveContentDetecting
     public var transformEngine: TransformEngine
     public var searchService: any SearchService
     public var blobStore: any BlobStore
@@ -33,9 +31,7 @@ public struct DependencyContainer: Sendable {
         repository: any ClipboardRepository,
         writeGuard: ClipboardWriteGuard,
         clipboardMonitor: ClipboardMonitor,
-        ephemeralSensitiveStore: SensitiveEphemeralStore,
         contentClassifier: any ContentClassifier,
-        sensitiveDetector: any SensitiveContentDetecting,
         transformEngine: TransformEngine,
         searchService: any SearchService,
         blobStore: any BlobStore,
@@ -58,9 +54,7 @@ public struct DependencyContainer: Sendable {
         self.repository = repository
         self.writeGuard = writeGuard
         self.clipboardMonitor = clipboardMonitor
-        self.ephemeralSensitiveStore = ephemeralSensitiveStore
         self.contentClassifier = contentClassifier
-        self.sensitiveDetector = sensitiveDetector
         self.transformEngine = transformEngine
         self.searchService = searchService
         self.blobStore = blobStore
@@ -84,8 +78,6 @@ public struct DependencyContainer: Sendable {
         let pasteboardClient = SystemPasteboardClient()
         let writeGuard = ClipboardWriteGuard()
         let contentClassifier = DefaultContentClassifier()
-        let sensitiveDetector = DefaultSensitiveContentDetector()
-        let ephemeralSensitiveStore = SensitiveEphemeralStore()
         let transformEngine = TransformEngine()
 
         var blobStore: FileSystemBlobStore
@@ -128,15 +120,13 @@ public struct DependencyContainer: Sendable {
 
         let snapshotBuilder = ClipboardSnapshotBuilder(
             contentClassifier: contentClassifier,
-            sensitiveDetector: sensitiveDetector,
             blobStore: blobStore
         )
         let monitor = ClipboardMonitor(
             pasteboardClient: pasteboardClient,
             repository: repository,
             writeGuard: writeGuard,
-            snapshotBuilder: snapshotBuilder,
-            ephemeralSensitiveStore: ephemeralSensitiveStore
+            snapshotBuilder: snapshotBuilder
         )
         let pasteEngine = PasteEngine(
             repository: repository,
@@ -156,9 +146,7 @@ public struct DependencyContainer: Sendable {
             repository: repository,
             writeGuard: writeGuard,
             clipboardMonitor: monitor,
-            ephemeralSensitiveStore: ephemeralSensitiveStore,
             contentClassifier: contentClassifier,
-            sensitiveDetector: sensitiveDetector,
             transformEngine: transformEngine,
             searchService: searchService,
             blobStore: blobStore,

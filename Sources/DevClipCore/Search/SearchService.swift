@@ -120,11 +120,6 @@ public actor SQLiteSearchService: SearchService {
                     return false
                 }
 
-            case let .sensitive(isSensitive):
-                guard entry.isSensitive == isSensitive else {
-                    return false
-                }
-
             case let .before(date):
                 guard entry.createdAt < date else {
                     return false

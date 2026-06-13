@@ -26,20 +26,16 @@ enum AppDependencyFactory {
         let pasteboardClient = SystemPasteboardClient()
         let writeGuard = ClipboardWriteGuard()
         let contentClassifier = DefaultContentClassifier()
-        let sensitiveDetector = DefaultSensitiveContentDetector()
-        let ephemeralSensitiveStore = SensitiveEphemeralStore()
         let transformEngine = TransformEngine()
         let snapshotBuilder = ClipboardSnapshotBuilder(
             contentClassifier: contentClassifier,
-            sensitiveDetector: sensitiveDetector,
             blobStore: blobStore
         )
         let monitor = ClipboardMonitor(
             pasteboardClient: pasteboardClient,
             repository: repository,
             writeGuard: writeGuard,
-            snapshotBuilder: snapshotBuilder,
-            ephemeralSensitiveStore: ephemeralSensitiveStore
+            snapshotBuilder: snapshotBuilder
         )
         let pasteEngine = PasteEngine(
             repository: repository,
@@ -62,9 +58,7 @@ enum AppDependencyFactory {
             repository: repository,
             writeGuard: writeGuard,
             clipboardMonitor: monitor,
-            ephemeralSensitiveStore: ephemeralSensitiveStore,
             contentClassifier: contentClassifier,
-            sensitiveDetector: sensitiveDetector,
             transformEngine: transformEngine,
             searchService: searchService,
             blobStore: blobStore,

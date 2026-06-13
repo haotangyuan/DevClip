@@ -4,42 +4,33 @@ public struct ClipboardSnapshotBuildResult: Equatable, Sendable {
     public var group: ClipboardGroup
     public var entries: [ClipboardEntry]
     public var representations: [ClipboardRepresentation]
-    public var protectedEntries: [ClipboardEntry]
-    public var protectedRepresentations: [ClipboardRepresentation]
     public var snapshotHash: String
 
     public init(
         group: ClipboardGroup,
         entries: [ClipboardEntry],
         representations: [ClipboardRepresentation],
-        protectedEntries: [ClipboardEntry] = [],
-        protectedRepresentations: [ClipboardRepresentation] = [],
         snapshotHash: String
     ) {
         self.group = group
         self.entries = entries
         self.representations = representations
-        self.protectedEntries = protectedEntries
-        self.protectedRepresentations = protectedRepresentations
         self.snapshotHash = snapshotHash
     }
 }
 
-/// Converts pasteboard snapshots into model records with type and sensitivity metadata.
+/// Converts pasteboard snapshots into model records with type metadata.
 public struct ClipboardSnapshotBuilder: Sendable {
     private let contentClassifier: any ContentClassifier
-    private let sensitiveDetector: any SensitiveContentDetecting
     private let blobStore: (any BlobStore)?
     private let thumbnailGenerator: any ImageThumbnailGenerating
 
     public init(
         contentClassifier: any ContentClassifier = DefaultContentClassifier(),
-        sensitiveDetector: any SensitiveContentDetecting = DefaultSensitiveContentDetector(),
         blobStore: (any BlobStore)? = nil,
         thumbnailGenerator: any ImageThumbnailGenerating = AppKitImageThumbnailGenerator()
     ) {
         self.contentClassifier = contentClassifier
-        self.sensitiveDetector = sensitiveDetector
         self.blobStore = blobStore
         self.thumbnailGenerator = thumbnailGenerator
     }
@@ -48,8 +39,6 @@ public struct ClipboardSnapshotBuilder: Sendable {
         let groupID = UUID()
         var entries: [ClipboardEntry] = []
         var representations: [ClipboardRepresentation] = []
-        var protectedEntries: [ClipboardEntry] = []
-        var protectedRepresentations: [ClipboardRepresentation] = []
 
         for item in snapshot.items {
             guard !item.representations.isEmpty else {
@@ -61,17 +50,9 @@ public struct ClipboardSnapshotBuilder: Sendable {
             let contentHash = ClipboardContentHasher.hash(item: item)
             let classificationInput = bestClassificationInput(in: item)
             let classification = await classify(input: classificationInput)
-            let sensitivity = await detectSensitivity(
-                input: classificationInput,
-                sourceBundleIdentifier: snapshot.sourceBundleIdentifier
-            )
             let detectedKind = classification.detectedKind
             let previewText = preview(from: extractedText, item: item)
-            let redactedPreview = redactedPreview(
-                original: previewText,
-                sensitivity: sensitivity.classification
-            )
-            let title = title(from: redactedPreview, detectedKind: detectedKind)
+            let title = title(from: previewText, detectedKind: detectedKind)
             let byteCount = item.representations.reduce(Int64(0)) { partial, representation in
                 partial + Int64(representation.data.count)
             }
@@ -79,8 +60,7 @@ public struct ClipboardSnapshotBuilder: Sendable {
             var metadata = metadata(
                 snapshot: snapshot,
                 item: item,
-                classification: classification,
-                sensitivity: sensitivity
+                classification: classification
             )
             for (key, value) in representationBuild.metadata.values {
                 metadata.values[key] = value
@@ -94,26 +74,18 @@ public struct ClipboardSnapshotBuilder: Sendable {
                 sourceAppName: snapshot.sourceAppName,
                 sourceBundleIdentifier: snapshot.sourceBundleIdentifier,
                 contentHash: contentHash,
-                searchableText: searchableText(
-                    original: extractedText ?? previewText,
-                    sensitivity: sensitivity.classification
-                ),
-                previewText: redactedPreview,
+                searchableText: extractedText ?? previewText,
+                previewText: previewText,
                 createdAt: snapshot.capturedAt,
                 updatedAt: snapshot.capturedAt,
-                isSensitive: sensitivity.classification != .none,
-                expiresAt: sensitivity.expiresAt,
+                isSensitive: false,
+                expiresAt: nil,
                 byteCount: byteCount,
                 metadata: metadata
             )
 
-            if sensitivity.shouldPersist {
-                entries.append(entry)
-                representations.append(contentsOf: representationBuild.representations)
-            } else if sensitivity.shouldRetainInMemory {
-                protectedEntries.append(entry)
-                protectedRepresentations.append(contentsOf: representationBuild.representations)
-            }
+            entries.append(entry)
+            representations.append(contentsOf: representationBuild.representations)
         }
 
         let group = ClipboardGroup(
@@ -132,8 +104,6 @@ public struct ClipboardSnapshotBuilder: Sendable {
             group: group,
             entries: entries,
             representations: representations,
-            protectedEntries: protectedEntries,
-            protectedRepresentations: protectedRepresentations,
             snapshotHash: ClipboardContentHasher.hash(snapshot: snapshot)
         )
     }
@@ -151,26 +121,6 @@ public struct ClipboardSnapshotBuilder: Sendable {
                         evidence: "classifier_error"
                     )
                 ]
-            )
-        }
-    }
-
-    private func detectSensitivity(
-        input: ClassificationInput,
-        sourceBundleIdentifier: String?
-    ) async -> SensitiveDetectionResult {
-        do {
-            return try await sensitiveDetector.detect(
-                input,
-                sourceBundleIdentifier: sourceBundleIdentifier
-            )
-        } catch {
-            return SensitiveDetectionResult(
-                classification: .potential,
-                evidence: ["detector_error"],
-                expiresAt: Date().addingTimeInterval(10 * 60),
-                shouldIndex: true,
-                shouldPersist: true
             )
         }
     }
@@ -379,34 +329,6 @@ public struct ClipboardSnapshotBuilder: Sendable {
         return .binary
     }
 
-    private func searchableText(
-        original: String,
-        sensitivity: SensitiveClassification
-    ) -> String {
-        switch sensitivity {
-        case .none:
-            original
-        case .potential:
-            "可能敏感内容已遮罩"
-        case .secret:
-            "敏感内容已遮罩"
-        }
-    }
-
-    private func redactedPreview(
-        original: String,
-        sensitivity: SensitiveClassification
-    ) -> String {
-        switch sensitivity {
-        case .none:
-            original
-        case .potential:
-            "可能敏感内容已遮罩"
-        case .secret:
-            "敏感内容已遮罩"
-        }
-    }
-
     private func preview(from extractedText: String?, item: PasteboardItemSnapshot) -> String {
         if let extractedText, !extractedText.isEmpty {
             return clipped(extractedText.replacingOccurrences(of: "\n", with: " "), maxLength: 500)
@@ -422,10 +344,9 @@ public struct ClipboardSnapshotBuilder: Sendable {
     private func metadata(
         snapshot: ClipboardSnapshot,
         item: PasteboardItemSnapshot,
-        classification: ClassificationResult,
-        sensitivity: SensitiveDetectionResult
+        classification: ClassificationResult
     ) -> ClipboardMetadata {
-        var values: [String: String] = [
+        let values: [String: String] = [
             "phase": "4",
             "representationTypes": representationTypes(in: item),
             "snapshotChangeCount": String(snapshot.changeCount),
@@ -440,14 +361,8 @@ public struct ClipboardSnapshotBuilder: Sendable {
                 .filter { $0.kind != classification.detectedKind }
                 .map(\.kind.rawValue)
                 .joined(separator: ","),
-            "sensitiveClassification": sensitivity.classification.rawValue,
-            "sensitiveEvidence": sensitivity.evidence.joined(separator: ","),
-            "shouldIndex": sensitivity.shouldIndex ? "true" : "false"
+            "shouldIndex": "true"
         ]
-
-        if sensitivity.classification != .none {
-            values["isMasked"] = "true"
-        }
 
         return ClipboardMetadata(values: values)
     }

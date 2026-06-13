@@ -21,7 +21,6 @@ public enum ClipboardMonitorPollResult: Equatable, Sendable {
     case noChange(changeCount: Int)
     case ignoredInternalWrite(changeCount: Int)
     case saved(changeCount: Int, entryCount: Int)
-    case protectedSecret(changeCount: Int, entryCount: Int)
 }
 
 /// Background actor that polls pasteboard changes and saves new snapshots.
@@ -30,7 +29,6 @@ public actor ClipboardMonitor {
     private let repository: any ClipboardRepository
     private let writeGuard: ClipboardWriteGuard
     private let snapshotBuilder: ClipboardSnapshotBuilder
-    private let ephemeralSensitiveStore: SensitiveEphemeralStore
     private let options: ClipboardMonitorOptions
 
     private var pollingTask: Task<Void, Never>?
@@ -43,14 +41,12 @@ public actor ClipboardMonitor {
         repository: any ClipboardRepository,
         writeGuard: ClipboardWriteGuard = ClipboardWriteGuard(),
         snapshotBuilder: ClipboardSnapshotBuilder = ClipboardSnapshotBuilder(),
-        ephemeralSensitiveStore: SensitiveEphemeralStore = SensitiveEphemeralStore(),
         options: ClipboardMonitorOptions = ClipboardMonitorOptions()
     ) {
         self.pasteboardClient = pasteboardClient
         self.repository = repository
         self.writeGuard = writeGuard
         self.snapshotBuilder = snapshotBuilder
-        self.ephemeralSensitiveStore = ephemeralSensitiveStore
         self.options = options
     }
 
@@ -96,11 +92,10 @@ public actor ClipboardMonitor {
     @discardableResult
     public func processSnapshot(_ snapshot: ClipboardSnapshot) async throws -> ClipboardMonitorPollResult {
         _ = try await repository.deleteExpiredEntries(now: Date())
-        _ = await ephemeralSensitiveStore.purgeExpired()
 
         let buildResult = await snapshotBuilder.build(from: snapshot)
 
-        guard !buildResult.entries.isEmpty || !buildResult.protectedEntries.isEmpty else {
+        guard !buildResult.entries.isEmpty else {
             return .noChange(changeCount: snapshot.changeCount)
         }
 
@@ -108,27 +103,13 @@ public actor ClipboardMonitor {
             return .ignoredInternalWrite(changeCount: snapshot.changeCount)
         }
 
-        if !buildResult.protectedEntries.isEmpty {
-            await ephemeralSensitiveStore.store(
-                entries: buildResult.protectedEntries,
-                representations: buildResult.protectedRepresentations
-            )
-        }
-
-        if !buildResult.entries.isEmpty {
-            try await repository.save(
-                group: buildResult.group,
-                entries: buildResult.entries,
-                representations: buildResult.representations
-            )
-
-            return .saved(changeCount: snapshot.changeCount, entryCount: buildResult.entries.count)
-        }
-
-        return .protectedSecret(
-            changeCount: snapshot.changeCount,
-            entryCount: buildResult.protectedEntries.count
+        try await repository.save(
+            group: buildResult.group,
+            entries: buildResult.entries,
+            representations: buildResult.representations
         )
+
+        return .saved(changeCount: snapshot.changeCount, entryCount: buildResult.entries.count)
     }
 
     private func runPollingLoop() async {

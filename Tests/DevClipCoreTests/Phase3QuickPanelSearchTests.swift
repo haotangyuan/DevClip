@@ -9,7 +9,7 @@ struct Phase3QuickPanelSearchTests {
         let parser = SearchQueryParser()
 
         let query = try parser.parse(
-            #""exact phrase" type:json app:"Visual Studio Code" is:pinned is:sensitive before:2026-06-01 after:2026-01-01 #api token"#
+            #""exact phrase" type:json app:"Visual Studio Code" is:pinned before:2026-06-01 after:2026-01-01 #api token"#
         )
 
         #expect(query.terms == ["token"])
@@ -17,7 +17,6 @@ struct Phase3QuickPanelSearchTests {
         #expect(query.filters.contains(.type(.json)))
         #expect(query.filters.contains(.app("Visual Studio Code")))
         #expect(query.filters.contains(.pinned(true)))
-        #expect(query.filters.contains(.sensitive(true)))
         #expect(query.filters.contains(.tag("api")))
         #expect(query.filters.contains { filter in
             if case .before = filter {
@@ -67,8 +66,7 @@ struct Phase3QuickPanelSearchTests {
             sourceAppName: "Terminal",
             sourceBundleIdentifier: "com.apple.Terminal",
             searchableText: #"{"hello":"world"}"#,
-            contentHash: "sha256:phase3-json",
-            isSensitive: true
+            contentHash: "sha256:phase3-json"
         )
 
         try await repository.save(group: group, entries: [sourceEntry, jsonEntry], representations: [])
@@ -203,7 +201,6 @@ private func makeEntry(
     searchableText: String,
     contentHash: String,
     isPinned: Bool = false,
-    isSensitive: Bool = false,
     metadata: ClipboardMetadata = ClipboardMetadata()
 ) -> ClipboardEntry {
     ClipboardEntry(
@@ -219,7 +216,6 @@ private func makeEntry(
         updatedAt: Date(timeIntervalSince1970: 10),
         copyCount: 1,
         isPinned: isPinned,
-        isSensitive: isSensitive,
         byteCount: Int64(searchableText.utf8.count),
         metadata: metadata
     )

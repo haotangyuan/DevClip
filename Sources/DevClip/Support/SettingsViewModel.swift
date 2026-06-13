@@ -52,7 +52,7 @@ final class SettingsViewModel: ObservableObject {
         do {
             let result = try await archiveService.exportEncrypted(passphrase: archivePassphrase)
             try await archiveFileClient.write(result.archive, to: url(from: exportPath))
-            statusMessage = "已导出 \(result.summary.exportedEntryCount) 条，跳过敏感记录 \(result.summary.skippedSensitiveCount) 条"
+            statusMessage = "已导出 \(result.summary.exportedEntryCount) 条记录"
         } catch {
             statusMessage = "导出失败：\(error.localizedDescription)"
         }

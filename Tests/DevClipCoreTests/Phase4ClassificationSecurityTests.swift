@@ -72,106 +72,28 @@ struct Phase4ClassificationSecurityTests {
     }
 
     @Test
-    func sensitiveDetectorClassifiesSecretTokenWithoutPersistingOrIndexing() async throws {
-        let now = Date(timeIntervalSince1970: 100)
-        let detector = DefaultSensitiveContentDetector(clock: { now })
-
-        let result = try await detector.detect(
-            ClassificationInput(data: Data("Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456".utf8)),
-            sourceBundleIdentifier: "com.apple.Terminal"
-        )
-
-        #expect(result.classification == .secret)
-        #expect(result.evidence.contains("bearer_token"))
-        #expect(result.expiresAt == now.addingTimeInterval(60))
-        #expect(!result.shouldIndex)
-        #expect(!result.shouldPersist)
-        #expect(result.shouldRetainInMemory)
-    }
-
-    @Test
-    func sensitiveDetectorClassifiesVerificationCodeAsPotential() async throws {
-        let now = Date(timeIntervalSince1970: 200)
-        let detector = DefaultSensitiveContentDetector(clock: { now })
-
-        let result = try await detector.detect(
-            ClassificationInput(data: Data("验证码 123456".utf8)),
-            sourceBundleIdentifier: "com.apple.MobileSMS"
-        )
-
-        #expect(result.classification == .potential)
-        #expect(result.evidence.contains("verification_code"))
-        #expect(result.expiresAt == now.addingTimeInterval(10 * 60))
-        #expect(result.shouldIndex)
-        #expect(result.shouldPersist)
-    }
-
-    @Test
-    func sensitiveDetectorIgnoresPasswordManagerSources() async throws {
-        let detector = DefaultSensitiveContentDetector()
-
-        let result = try await detector.detect(
-            ClassificationInput(data: Data("ordinary copied text".utf8)),
-            sourceBundleIdentifier: "com.1password.1password"
-        )
-
-        #expect(result.classification == .secret)
-        #expect(result.evidence == ["source_app_ignored"])
-        #expect(!result.shouldPersist)
-        #expect(!result.shouldRetainInMemory)
-    }
-
-    @Test
-    func monitorStoresSecretOnlyInEphemeralMemory() async throws {
-        let repository = InMemoryClipboardRepository()
-        let ephemeralStore = SensitiveEphemeralStore()
-        let monitor = ClipboardMonitor(
-            pasteboardClient: EmptyPasteboardClient(),
-            repository: repository,
-            writeGuard: ClipboardWriteGuard(persistMarkers: false),
-            ephemeralSensitiveStore: ephemeralStore
-        )
-        let privateKey = """
-        -----BEGIN PRIVATE KEY-----
-        abcdefghijklmnopqrstuvwxyz
-        -----END PRIVATE KEY-----
-        """
-
-        let result = try await monitor.processSnapshot(
-            makeSnapshot(changeCount: 401, text: privateKey)
-        )
-
-        let persistedEntries = try await repository.entries()
-        let ephemeralRecords = await ephemeralStore.records()
-
-        #expect(result == .protectedSecret(changeCount: 401, entryCount: 1))
-        #expect(persistedEntries.isEmpty)
-        #expect(ephemeralRecords.count == 1)
-        #expect(ephemeralRecords.first?.entry.isSensitive == true)
-        #expect(ephemeralRecords.first?.entry.metadata.values["shouldIndex"] == "false")
-    }
-
-    @Test
-    func monitorMasksPotentialSensitiveContentAndSetsExpiry() async throws {
+    func monitorPersistsTokenLikeContentWithoutMasking() async throws {
         let repository = InMemoryClipboardRepository()
         let monitor = ClipboardMonitor(
             pasteboardClient: EmptyPasteboardClient(),
             repository: repository,
             writeGuard: ClipboardWriteGuard(persistMarkers: false)
         )
+        let token = "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456"
 
         let result = try await monitor.processSnapshot(
-            makeSnapshot(changeCount: 402, text: "验证码 123456")
+            makeSnapshot(changeCount: 401, text: token)
         )
+
         let entries = try await repository.entries()
 
-        #expect(result == .saved(changeCount: 402, entryCount: 1))
+        #expect(result == .saved(changeCount: 401, entryCount: 1))
         #expect(entries.count == 1)
-        #expect(entries.first?.isSensitive == true)
-        #expect(entries.first?.previewText == "可能敏感内容已遮罩")
-        #expect(entries.first?.searchableText == "可能敏感内容已遮罩")
-        #expect(entries.first?.expiresAt != nil)
-        #expect(entries.first?.metadata.values["sensitiveClassification"] == "potential")
+        #expect(entries.first?.isSensitive == false)
+        #expect(entries.first?.previewText == token)
+        #expect(entries.first?.searchableText == token)
+        #expect(entries.first?.expiresAt == nil)
+        #expect(entries.first?.metadata.values["sensitiveClassification"] == nil)
     }
 
     @Test

@@ -108,12 +108,6 @@ public struct SearchQueryParser: SearchQueryParsing {
             case "unpinned":
                 query.filters.append(.pinned(false))
                 return true
-            case "sensitive":
-                query.filters.append(.sensitive(true))
-                return true
-            case "public":
-                query.filters.append(.sensitive(false))
-                return true
             default:
                 return false
             }
